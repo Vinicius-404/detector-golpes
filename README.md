@@ -80,7 +80,3 @@ Também há botões de atalho (**Demo — nível**) na aba Ameaças para alterna
 - Chrome Extensions Manifest V3
 
 ---
-
-## 📄 Licença
-
-Defina aqui a licença do projeto (ex: MIT).
