@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<title>Proteção contra Golpes</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div class="app">
+
+  <!-- ============ top ============ -->
+  <header class="topbar">
+    <span class="topbar__title">Proteção contra Golpes</span>
+    <button class="topbar__bell" id="btn-simulate-email" title="Simular e-mail novo (demo)">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+        <path d="M12 2a6 6 0 0 0-6 6v3.2c0 .6-.24 1.18-.66 1.6L4 14.2c-.9.9-.26 2.44 1 2.44h14c1.26 0 1.9-1.54 1-2.44l-1.34-1.4a2.27 2.27 0 0 1-.66-1.6V8a6 6 0 0 0-6-6Z" fill="currentColor"/>
+        <path d="M9.5 19a2.5 2.5 0 0 0 5 0" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+      </svg>
+    </button>
+  </header>
+
+  <!-- ============ area principal ============ -->
+  <main class="main">
+
+    <!-- ---------- inicio ---------- -->
+    <section class="screen active" id="screen-inicio">
+      <div class="card card--hero">
+        <div class="icon-badge icon-badge--safe">
+          <svg width="34" height="34" viewBox="0 0 24 24" fill="none"><path d="M5 12.5 10 17 19 7" stroke="#59CD57" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <div class="card--hero__text">
+          <h2>Proteção contra golpes</h2>
+          <p>Proteja seus e-mails contra ataques maliciosos! Basta configurar a extensão para ficar seguro contra ataques, clique no botão abaixo e comece a evitar riscos sem necessidade!</p>
+        </div>
+        <button class="btn btn--purple" id="btn-ativar-protecao">Ativar proteção</button>
+      </div>
+
+      <div class="card card--resumo">
+        <h3>Resumo</h3>
+        <div class="resumo__grid">
+          <div class="resumo__item">
+            <div class="resumo__icon resumo__icon--envelope">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="m4 6.5 8 6 8-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            </div>
+            <span class="resumo__num" id="stat-emails">00</span>
+            <span class="resumo__label">E-mails analisados</span>
+          </div>
+          <div class="resumo__item">
+            <div class="resumo__icon resumo__icon--shield">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 3 5 5.5V11c0 4.6 3 8 7 9.4 4-1.4 7-4.8 7-9.4V5.5L12 3Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+            </div>
+            <span class="resumo__num" id="stat-ameacas">00</span>
+            <span class="resumo__label">Ameaças detectadas</span>
+          </div>
+          <div class="resumo__item">
+            <div class="resumo__icon resumo__icon--flag">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M6 3v18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M6 4h11l-2.5 3.5L17 11H6" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+            </div>
+            <span class="resumo__num" id="stat-denuncias">00</span>
+            <span class="resumo__label">Denuncias realizadas</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card card--ultima">
+        <div class="ultima__icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8"/><path d="M12 7v5.5l3.5 2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </div>
+        <div>
+          <span class="ultima__label">Ultima verificação:</span>
+          <span class="ultima__value" id="ultima-verificacao">14 de julho, sexta-feira, 14:03</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- ameaças ---------- -->
+    <section class="screen" id="screen-ameacas">
+      <div class="card threat-card" id="threat-card">
+        <div class="threat-card__head">
+          <div class="icon-badge" id="threat-icon-badge">
+            <svg id="threat-icon-svg" width="30" height="30" viewBox="0 0 24 24" fill="none"></svg>
+          </div>
+          <div class="threat-card__headtext">
+            <strong id="threat-title">Ameaça detectada:</strong>
+            <div class="threat-card__level">
+              <span>Nível de perigo:</span>
+              <span class="badge" id="threat-badge">Alto</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="threat-card__body" id="threat-body">
+          <p><strong>Remetente:</strong> fulanoDeTal@gmail.com</p>
+          <p><strong>Analisado em:</strong> Hoje, 12:37</p>
+          <p><strong>Motivo da suspeita:</strong></p>
+          <ul>
+            <li>Lorem ipsum dolor sit amet, consectetur adipiscing elit.</li>
+            <li>Ut sagittis augue eget lectus viverra fermentum.</li>
+            <li>Suspendisse id tortor sed nisl mollis consequat et at felis.</li>
+          </ul>
+        </div>
+
+        <button class="btn btn--red" id="btn-denunciar">Denunciar</button>
+      </div>
+
+      <div class="card historico">
+        <button class="historico__toggle" id="historico-toggle">
+          <span class="historico__icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M3 12a9 9 0 1 0 2.6-6.35" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M3 4v5h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </span>
+          <span class="historico__text">
+            <strong>histórico de ameaças</strong>
+            <small id="historico-sub">Clique para ver seu histórico de ameaças</small>
+          </span>
+          <svg class="chevron" id="historico-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div class="historico__list" id="historico-list">
+          <div class="historico__bar historico__bar--alto"></div>
+          <div class="historico__bar historico__bar--alto2"></div>
+          <div class="historico__bar historico__bar--medio"></div>
+          <div class="historico__bar historico__bar--baixo2"></div>
+          <div class="historico__bar historico__bar--baixo"></div>
+        </div>
+      </div>
+
+      <div class="demo-switch">
+        <span>Demo — nível:</span>
+        <button data-level="alto" class="demo-switch__btn active">Alto</button>
+        <button data-level="medio" class="demo-switch__btn">Médio</button>
+        <button data-level="baixo" class="demo-switch__btn">Baixo</button>
+      </div>
+    </section>
+
+    <!-- ---------- config ---------- -->
+    <section class="screen" id="screen-config">
+      <div class="card config-card">
+        <h3>Configurações</h3>
+        <ul class="config-list">
+          <li class="config-item">
+            <label class="switch"><input type="checkbox" checked><span class="slider"></span></label>
+            <span>Lorem ipsum dolor sit amet,</span>
+          </li>
+          <li class="config-item">
+            <label class="switch"><input type="checkbox" checked><span class="slider"></span></label>
+            <span>consectetur adipiscing elit</span>
+          </li>
+          <li class="config-item">
+            <label class="switch"><input type="checkbox"><span class="slider"></span></label>
+            <span>Ut sagittis augue eget lectus viverra fermentum</span>
+          </li>
+          <li class="config-item">
+            <label class="switch"><input type="checkbox" checked><span class="slider"></span></label>
+            <span>Suspendisse id tortor sed nisl mollis consequat et at felis</span>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ============ botão ============ -->
+  <nav class="bottomnav" id="bottomnav">
+    <button class="navbtn active" data-screen="inicio">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M4 11.5 12 4l8 7.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M6 10v9h12v-9" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+      <span>início</span>
+    </button>
+    <button class="navbtn" data-screen="ameacas">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 3 5 5.5V11c0 4.6 3 8 7 9.4 4-1.4 7-4.8 7-9.4V5.5L12 3Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+      <span>ameaças</span>
+    </button>
+    <button class="navbtn" data-screen="config">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.8"/><path d="M19.4 13.5a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V19.5a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.56 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H4.5a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.56-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34H10a1.7 1.7 0 0 0 1-1.55V4.5a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V10a1.7 1.7 0 0 0 1.55 1h.09a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.56 1Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/></svg>
+      <span>config</span>
+    </button>
+  </nav>
+
+  <!-- ============ novo email ============ -->
+  <section class="overlay" id="overlay-newemail">
+    <div class="topbar topbar--overlay">
+      <button class="topbar__back" id="btn-back-newemail" title="Voltar para o início">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="m15 5-7 7 7 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <span class="topbar__title">Proteção contra Golpes</span>
+      <span class="topbar__bell">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 2a6 6 0 0 0-6 6v3.2c0 .6-.24 1.18-.66 1.6L4 14.2c-.9.9-.26 2.44 1 2.44h14c1.26 0 1.9-1.54 1-2.44l-1.34-1.4a2.27 2.27 0 0 1-.66-1.6V8a6 6 0 0 0-6-6Z" fill="currentColor"/></svg>
+      </span>
+    </div>
+    <div class="overlay__body">
+      <div class="card card--center">
+        <div class="icon-badge icon-badge--medio icon-badge--lg">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="#fff" stroke-width="2"/><path d="M12 8v5" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/><circle cx="12" cy="16.3" r="1.1" fill="#fff"/></svg>
+        </div>
+        <h2>Foi detectado um e-mail novo</h2>
+        <p>Esse e-mail da página em que você está ainda não foi analisado! Clique aqui para verificar se a mensagem veio de um remetente confiável.</p>
+        <button class="btn btn--green" id="btn-me-proteger">Me proteger!</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ OVERLAY: ANÁLISE ============ -->
+  <section class="overlay" id="overlay-analise">
+    <div class="topbar topbar--overlay">
+      <button class="topbar__back" id="btn-back-analise" title="Voltar para o início">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="m15 5-7 7 7 7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <span class="topbar__title">Proteção contra Golpes</span>
+      <span class="topbar__bell">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 2a6 6 0 0 0-6 6v3.2c0 .6-.24 1.18-.66 1.6L4 14.2c-.9.9-.26 2.44 1 2.44h14c1.26 0 1.9-1.54 1-2.44l-1.34-1.4a2.27 2.27 0 0 1-.66-1.6V8a6 6 0 0 0-6-6Z" fill="currentColor"/></svg>
+      </span>
+    </div>
+    <div class="overlay__body">
+      <div class="card card--center">
+        <div class="icon-badge icon-badge--medio icon-badge--lg icon-spin">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none"><path d="M12 3v3M12 18v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M3 12h3M18 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/></svg>
+        </div>
+        <h2>Em analise:</h2>
+        <p class="analise__sub">Verificando mensagem...</p>
+        <div class="progress"><div class="progress__bar" id="progress-bar"></div></div>
+      </div>
+    </div>
+  </section>
+
+</div>
+<script src="script.js"></script>
+</body>
+</html>
