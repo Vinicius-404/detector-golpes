@@ -2,7 +2,7 @@
 
 Extensão de navegador (Chrome, Manifest V3) para alertar usuários sobre e-mails suspeitos de phishing e golpes, analisando o remetente e o conteúdo da mensagem.
 
-> Front-end desenvolvido a partir do protótipo no Figma: [apicativo](https://www.figma.com/design/8CdJoHjXJzSWibTndczNwQ/apicativo)
+> Front-end desenvolvido a partir do protótipo no Figma: [apicativo](https://www.figma.com/design/8CdJoHjXJzSWibTndczNwQ/aplicativo)
 
 ![status](https://img.shields.io/badge/status-front--end%20mockado-yellow)
 ![manifest](https://img.shields.io/badge/manifest-v3-blue)
