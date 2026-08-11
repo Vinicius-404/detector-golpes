@@ -2,28 +2,10 @@
 
 Extensão de navegador (Chrome, Manifest V3) para alertar usuários sobre e-mails suspeitos de phishing e golpes, analisando o remetente e o conteúdo da mensagem.
 
-> Front-end desenvolvido a partir do protótipo no Figma: [apicativo](https://www.figma.com/design/8CdJoHjXJzSWibTndczNwQ/apicativo)
+> Front-end desenvolvido a partir do protótipo no Figma: [apicativo](https://www.figma.com/design/8CdJoHjXJzSWibTndczNwQ/aplicativo)
 
 ![status](https://img.shields.io/badge/status-front--end%20mockado-yellow)
 ![manifest](https://img.shields.io/badge/manifest-v3-blue)
-
----
-
-## ⚠️ Status atual do projeto
-
-Este repositório contém **apenas o front-end** do popup da extensão. Ainda **não há integração com back-end**. Ou seja:
-
-- Os toggles da tela de **Configurações** não persistem nada — é só visual.
-- O nível de ameaça (Alto / Médio / Baixo) exibido na aba **Ameaças** é **sorteado aleatoriamente** no `script.js`, apenas para demonstrar os três estados visuais.
-- Os contadores do **Resumo** (e-mails analisados, ameaças detectadas, denúncias) ficam em memória e resetam ao fechar o popup — não usam `chrome.storage` nem API.
-- O histórico de ameaças é decorativo (barras coloridas), sem dados reais.
-
-Para virar um produto funcional de verdade, ainda faltam:
-
-1. **Content script** — ler o remetente/conteúdo do e-mail aberto (Gmail, Outlook, etc.).
-2. **Back-end/API ou `chrome.storage`** — decidir e persistir o nível de risco, configurações do usuário e histórico.
-
----
 
 ## 📱 Telas implementadas
 
@@ -98,7 +80,3 @@ Também há botões de atalho (**Demo — nível**) na aba Ameaças para alterna
 - Chrome Extensions Manifest V3
 
 ---
-
-## 📄 Licença
-
-Defina aqui a licença do projeto (ex: MIT).
