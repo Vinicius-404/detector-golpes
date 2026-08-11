@@ -79,4 +79,8 @@ Também há botões de atalho (**Demo — nível**) na aba Ameaças para alterna
 - HTML5 / CSS3 / JavaScript puro (sem frameworks)
 - Chrome Extensions Manifest V3
 
+<<<<<<< HEAD
 ---
+=======
+---
+>>>>>>> bbf481871789ed69b39b082388711bb089e05ecc
