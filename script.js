@@ -1,3 +1,30 @@
+// ---------- CONFIG DA API ----------
+const API_URL = 'http://localhost:8000/analisar-email';
+
+// e-mails de exemplo usados na demonstração (a extração do e-mail real
+// da página do Gmail/Outlook ainda não existe, ver README)
+const SAMPLE_EMAILS = [
+  {
+    remetente: 'suporte@banc0-seguro.com',
+    email_subject: 'Sua conta será bloqueada em 24 horas',
+    email_text: 'Prezado cliente, identificamos uma atividade suspeita em sua conta. ' +
+      'Para evitar o bloqueio em 24 horas, clique no link abaixo e confirme seus dados ' +
+      'bancários e senha imediatamente. Ação urgente necessária.'
+  },
+  {
+    remetente: 'premios@sorteio-nacional.info',
+    email_subject: 'Parabéns! Você ganhou um prêmio',
+    email_text: 'Parabéns! Seu e-mail foi sorteado e você ganhou um prêmio em dinheiro. ' +
+      'Para resgatar, confirme seus dados pessoais e a taxa de liberação imediatamente via PIX.'
+  },
+  {
+    remetente: 'equipe@newsletter-tech.com',
+    email_subject: 'Resumo semanal de notícias de tecnologia',
+    email_text: 'Olá! Segue o resumo das principais notícias de tecnologia desta semana, ' +
+      'incluindo lançamentos de produtos e artigos sobre inteligência artificial.'
+  }
+];
+
 // ---------- STORAGE (chrome.storage.local, com fallback para testes fora da extensão) ----------
 const storage = {
   get(key) {
@@ -98,16 +125,8 @@ function renderThreat(level) {
   document.getElementById('threat-icon-svg').innerHTML = cfg.icon;
 
   document.getElementById('btn-denunciar').style.display = cfg.showReport ? 'block' : 'none';
-
-  document.querySelectorAll('.demo-switch__btn').forEach(b => {
-    b.classList.toggle('active', b.dataset.level === level);
-  });
 }
 renderThreat(currentLevel);
-
-document.querySelectorAll('.demo-switch__btn').forEach(btn => {
-  btn.addEventListener('click', () => renderThreat(btn.dataset.level));
-});
 
 // ---------- HISTÓRICO DE AMEAÇAS (persistente, máx. 3 itens, FIFO) ----------
 const historicoToggle = document.getElementById('historico-toggle');
@@ -180,22 +199,52 @@ storage.get('ultimaVerificacao').then((val) => {
 getStats().then(saveStats);
 
 // ---------- BOTÃO "ATIVAR PROTEÇÃO" ----------
-document.getElementById('btn-ativar-protecao').addEventListener('click', (e) => {
-  const btn = e.currentTarget;
+const btnAtivarProtecao = document.getElementById('btn-ativar-protecao');
+
+function marcarProtecaoAtivada(btn) {
   btn.textContent = 'Proteção ativada ✓';
   btn.disabled = true;
   btn.style.opacity = '0.75';
+}
+
+btnAtivarProtecao.addEventListener('click', async (e) => {
+  marcarProtecaoAtivada(e.currentTarget);
+  await storage.set('protecaoAtivada', true);
+});
+
+// ao abrir o popup, recarrega o estado salvo do botão de proteção
+storage.get('protecaoAtivada').then((ativada) => {
+  if (ativada) marcarProtecaoAtivada(btnAtivarProtecao);
 });
 
 // ---------- BOTÃO "DENUNCIAR" ----------
-document.getElementById('btn-denunciar').addEventListener('click', async (e) => {
+const btnDenunciar = document.getElementById('btn-denunciar');
+
+function marcarDenunciado(btn) {
+  btn.textContent = 'Denunciado ✓';
+  btn.disabled = true;
+  btn.style.opacity = '0.75';
+}
+
+function resetarBotaoDenunciar(btn) {
+  btn.textContent = 'Denunciar';
+  btn.disabled = false;
+  btn.style.opacity = '1';
+}
+
+btnDenunciar.addEventListener('click', async (e) => {
   const btn = e.currentTarget;
   const stats = await getStats();
   stats.denuncias += 1;
   await saveStats(stats);
-  btn.textContent = 'Denunciado ✓';
-  btn.disabled = true;
-  btn.style.opacity = '0.75';
+  marcarDenunciado(btn);
+
+  // marca a denúncia no resultado salvo, pra manter o estado ao reabrir
+  const ultimo = await storage.get('ultimoResultado');
+  if (ultimo) {
+    ultimo.denunciado = true;
+    await storage.set('ultimoResultado', ultimo);
+  }
 });
 
 // ---------- OVERLAYS: NOVO E-MAIL -> ANÁLISE -> RESULTADO ----------
@@ -232,6 +281,121 @@ function backToInicio() {
 document.getElementById('btn-back-newemail').addEventListener('click', backToInicio);
 document.getElementById('btn-back-analise').addEventListener('click', backToInicio);
 
+// chama a API real; se falhar (backend fora do ar, CORS, etc.),
+// cai num fallback local simples baseado em palavras-chave
+async function analisarEmail(sample) {
+  try {
+    const resp = await fetch(API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email_text: sample.email_text,
+        email_subject: sample.email_subject,
+        sender: sample.remetente
+      })
+    });
+
+    if (!resp.ok) throw new Error('resposta HTTP ' + resp.status);
+
+    const data = await resp.json();
+    return {
+      offline: false,
+      risco: data.risco,
+      motivos: (data.explicacao || []).map(p => p.descricao),
+      modeloInfo: `Modelo: ${data.modelo_usado} · score ${data.score.toFixed(2)} · ${data.tempo_inferencia_ms.toFixed(2)}ms`
+    };
+  } catch (err) {
+    // fallback local por palavras-chave, só pra não travar a demonstração
+    const texto = (sample.email_text || '').toLowerCase();
+    const palavrasSuspeitas = ['urgente', 'bloqueada', 'clique', 'senha', 'prêmio', 'pix', 'confirme seus dados'];
+    const achadas = palavrasSuspeitas.filter(p => texto.includes(p));
+    const risco = achadas.length >= 2 ? 'alto' : achadas.length === 1 ? 'medio' : 'baixo';
+    return {
+      offline: true,
+      risco,
+      motivos: achadas.length
+        ? achadas.map(p => `Palavra suspeita encontrada: "${p}"`)
+        : ['Nenhum padrão suspeito encontrado (análise local simplificada)'],
+      modeloInfo: '⚠ Backend indisponível — usando análise local simplificada'
+    };
+  }
+}
+
+function renderMotivosERemetente(sample, resultado) {
+  threatEmptyEl.style.display = 'none';
+  threatCardEl.style.display = 'block';
+
+  const quando = formatAgora();
+  document.getElementById('threat-remetente').textContent = sample.remetente;
+  document.getElementById('threat-quando').textContent = quando;
+
+  const lista = document.getElementById('threat-motivos');
+  lista.innerHTML = '';
+  resultado.motivos.forEach(m => {
+    const li = document.createElement('li');
+    li.textContent = m;
+    lista.appendChild(li);
+  });
+
+  // linha discreta com info do modelo/status do backend
+  let infoEl = document.getElementById('threat-model-info');
+  if (!infoEl) {
+    infoEl = document.createElement('p');
+    infoEl.id = 'threat-model-info';
+    infoEl.style.cssText = 'font-size:11px;opacity:0.65;margin-top:8px;';
+    document.getElementById('threat-body').appendChild(infoEl);
+  }
+  infoEl.textContent = resultado.modeloInfo;
+
+  // reseta o botão de denúncia pra cada nova análise (ainda não denunciada)
+  resetarBotaoDenunciar(btnDenunciar);
+
+  // salva o último resultado pra reaparecer quando o popup for reaberto
+  storage.set('ultimoResultado', {
+    risco: resultado.risco,
+    remetente: sample.remetente,
+    quando,
+    motivos: resultado.motivos,
+    modeloInfo: resultado.modeloInfo,
+    denunciado: false
+  });
+}
+
+// ao abrir o popup, recarrega o último resultado real (se existir) em vez
+// de deixar o texto de exemplo fixo do HTML
+const threatEmptyEl = document.getElementById('threat-empty');
+const threatCardEl = document.getElementById('threat-card');
+
+storage.get('ultimoResultado').then((ultimo) => {
+  if (!ultimo) return; // mantém o estado vazio padrão
+
+  threatEmptyEl.style.display = 'none';
+  threatCardEl.style.display = 'block';
+
+  renderThreat(ultimo.risco);
+  document.getElementById('threat-remetente').textContent = ultimo.remetente;
+  document.getElementById('threat-quando').textContent = ultimo.quando;
+
+  const lista = document.getElementById('threat-motivos');
+  lista.innerHTML = '';
+  ultimo.motivos.forEach(m => {
+    const li = document.createElement('li');
+    li.textContent = m;
+    lista.appendChild(li);
+  });
+
+  let infoEl = document.getElementById('threat-model-info');
+  if (!infoEl) {
+    infoEl = document.createElement('p');
+    infoEl.id = 'threat-model-info';
+    infoEl.style.cssText = 'font-size:11px;opacity:0.65;margin-top:8px;';
+    document.getElementById('threat-body').appendChild(infoEl);
+  }
+  infoEl.textContent = ultimo.modeloInfo;
+
+  if (ultimo.denunciado) marcarDenunciado(btnDenunciar);
+});
+
 document.getElementById('btn-me-proteger').addEventListener('click', () => {
   showOverlay(overlayAnalise);
   progressBar.style.width = '0%';
@@ -240,24 +404,28 @@ document.getElementById('btn-me-proteger').addEventListener('click', () => {
     progressBar.style.width = '100%';
   });
 
-  setTimeout(async () => {
+  // sorteia um dos e-mails de exemplo pra simular a chegada de um e-mail real
+  const sample = SAMPLE_EMAILS[Math.floor(Math.random() * SAMPLE_EMAILS.length)];
+
+  (async () => {
+    const resultado = await analisarEmail(sample);
+
     hideOverlays();
 
     // atualiza contador de e-mails analisados (persistente)
     const stats = await getStats();
     stats.emails += 1;
 
-    // sorteia um nível de ameaça pra demonstrar o resultado
-    const levels = ['alto', 'medio', 'baixo'];
-    const result = levels[Math.floor(Math.random() * levels.length)];
+    const result = resultado.risco;
     if (result !== 'baixo') {
       stats.ameacas += 1;
     }
     await saveStats(stats);
     renderThreat(result);
+    renderMotivosERemetente(sample, resultado);
 
     // registra no histórico (mantém só os 3 mais recentes)
-    await addHistorico(result, 'fulanoDeTal@gmail.com');
+    await addHistorico(result, sample.remetente);
 
     // atualiza "última verificação"
     const agora = formatAgora();
@@ -268,5 +436,5 @@ document.getElementById('btn-me-proteger').addEventListener('click', () => {
     navButtons.forEach(b => b.classList.remove('active'));
     document.querySelector('.navbtn[data-screen="ameacas"]').classList.add('active');
     screens.forEach(s => s.classList.toggle('active', s.id === 'screen-ameacas'));
-  }, 1800);
+  })();
 });

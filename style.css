@@ -105,6 +105,18 @@ body{
   box-shadow:0 1px 4px rgba(0,0,0,.06);
 }
 
+/* ---------- AMEAÇAS: ESTADO VAZIO (nenhuma análise ainda) ---------- */
+.threat-empty{
+  text-align:center;
+  padding:24px 16px;
+}
+.threat-empty p{
+  margin:0;
+  font-size:12px;
+  line-height:1.6;
+  color:var(--text-soft);
+}
+
 /* ---------- HERO (INÍCIO) ---------- */
 .card--hero{
   display:flex;
@@ -282,26 +294,6 @@ body{
 .historico__bar--medio{background:#FFE9B0;}
 .historico__bar--baixo{background:#C7EEC0;}
 @keyframes fadeIn{from{opacity:0; transform:translateY(-4px);} to{opacity:1; transform:translateY(0);}}
-
-/* ---------- DEMO SWITCH (helper, not part of original design) ---------- */
-.demo-switch{
-  display:flex;
-  align-items:center;
-  gap:6px;
-  font-size:10px;
-  color:var(--text-soft);
-  padding:0 2px;
-}
-.demo-switch__btn{
-  border:1px solid #ddd;
-  background:#fff;
-  border-radius:8px;
-  padding:4px 8px;
-  font-size:10px;
-  cursor:pointer;
-  color:var(--text-soft);
-}
-.demo-switch__btn.active{background:var(--purple); color:#fff; border-color:var(--purple);}
 
 /* ---------- CONFIG ---------- */
 .config-card h3{margin:0 0 12px; font-size:14px;}

@@ -75,7 +75,11 @@
 
     <!-- ---------- SCREEN: AMEAÇAS ---------- -->
     <section class="screen" id="screen-ameacas">
-      <div class="card threat-card" id="threat-card">
+      <div class="card threat-empty" id="threat-empty">
+        <p>Nenhuma análise realizada ainda.<br>Clique no sino 🔔 e depois em "Me proteger!" pra analisar um e-mail.</p>
+      </div>
+
+      <div class="card threat-card" id="threat-card" style="display:none;">
         <div class="threat-card__head">
           <div class="icon-badge" id="threat-icon-badge">
             <svg id="threat-icon-svg" width="30" height="30" viewBox="0 0 24 24" fill="none"></svg>
@@ -90,14 +94,10 @@
         </div>
 
         <div class="threat-card__body" id="threat-body">
-          <p><strong>Remetente:</strong> fulanoDeTal@gmail.com</p>
-          <p><strong>Analisado em:</strong> Hoje, 12:37</p>
+          <p><strong>Remetente:</strong> <span id="threat-remetente"></span></p>
+          <p><strong>Analisado em:</strong> <span id="threat-quando"></span></p>
           <p><strong>Motivo da suspeita:</strong></p>
-          <ul>
-            <li>Lorem ipsum dolor sit amet, consectetur adipiscing elit.</li>
-            <li>Ut sagittis augue eget lectus viverra fermentum.</li>
-            <li>Suspendisse id tortor sed nisl mollis consequat et at felis.</li>
-          </ul>
+          <ul id="threat-motivos"></ul>
         </div>
 
         <button class="btn btn--red" id="btn-denunciar">Denunciar</button>
@@ -119,12 +119,6 @@
         </div>
       </div>
 
-      <div class="demo-switch">
-        <span>Demo — visual:</span>
-        <button data-level="alto" class="demo-switch__btn active">Alto</button>
-        <button data-level="medio" class="demo-switch__btn">Médio</button>
-        <button data-level="baixo" class="demo-switch__btn">Baixo</button>
-      </div>
     </section>
 
     <!-- ---------- SCREEN: CONFIG ---------- -->
