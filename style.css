@@ -258,13 +258,30 @@ body{
   flex-direction:column;
   gap:8px;
 }
-.historico__list.expanded{max-height:260px; padding-bottom:16px;}
-.historico__bar{height:30px; border-radius:8px;}
+.historico__list.expanded{max-height:320px; padding-bottom:16px;}
+.historico__empty{
+  margin:0;
+  font-size:11px;
+  color:var(--text-soft);
+  text-align:center;
+  padding:10px 0 4px;
+}
+.historico__bar{
+  border-radius:8px;
+  padding:8px 10px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  font-size:10.5px;
+  animation:fadeIn .25s ease;
+}
+.historico__bar strong{font-size:11px;}
+.historico__bar span{color:rgba(0,0,0,.55);}
 .historico__bar--alto{background:#FFC9C9;}
-.historico__bar--alto2{background:#FFE1B0;}
-.historico__bar--medio{background:#FFF6C2;}
-.historico__bar--baixo2{background:#D9F2D3;}
-.historico__bar--baixo{background:#B7E8AE;}
+.historico__bar--medio{background:#FFE9B0;}
+.historico__bar--baixo{background:#C7EEC0;}
+@keyframes fadeIn{from{opacity:0; transform:translateY(-4px);} to{opacity:1; transform:translateY(0);}}
 
 /* ---------- DEMO SWITCH (helper, not part of original design) ---------- */
 .demo-switch{

@@ -1,3 +1,37 @@
+// ---------- STORAGE (chrome.storage.local, com fallback para testes fora da extensão) ----------
+const storage = {
+  get(key) {
+    return new Promise((resolve) => {
+      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+        chrome.storage.local.get([key], (result) => resolve(result[key]));
+      } else {
+        try { resolve(JSON.parse(window.__devStorage?.[key] ?? 'null')); }
+        catch (e) { resolve(null); }
+      }
+    });
+  },
+  set(key, value) {
+    return new Promise((resolve) => {
+      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+        chrome.storage.local.set({ [key]: value }, resolve);
+      } else {
+        window.__devStorage = window.__devStorage || {};
+        window.__devStorage[key] = JSON.stringify(value);
+        resolve();
+      }
+    });
+  }
+};
+
+const MAX_HISTORICO = 3;
+const LEVEL_LABEL = { alto: 'Alto', medio: 'Médio', baixo: 'Baixo' };
+
+function formatAgora() {
+  const d = new Date();
+  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', weekday: 'long' }) +
+    ', ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+
 // ---------- CONFIG POR NÍVEL DE AMEAÇA ----------
 const THREAT_CONFIG = {
   alto: {
@@ -30,7 +64,6 @@ const THREAT_CONFIG = {
 };
 
 let currentLevel = 'alto';
-let historicoExpanded = false;
 
 // ---------- NAVEGAÇÃO ENTRE TELAS (bottom nav) ----------
 const navButtons = document.querySelectorAll('.navbtn');
@@ -76,11 +109,42 @@ document.querySelectorAll('.demo-switch__btn').forEach(btn => {
   btn.addEventListener('click', () => renderThreat(btn.dataset.level));
 });
 
-// ---------- HISTÓRICO DE AMEAÇAS (expandir/colapsar) ----------
+// ---------- HISTÓRICO DE AMEAÇAS (persistente, máx. 3 itens, FIFO) ----------
 const historicoToggle = document.getElementById('historico-toggle');
 const historicoList = document.getElementById('historico-list');
 const historicoChevron = document.getElementById('historico-chevron');
 const historicoSub = document.getElementById('historico-sub');
+let historicoExpanded = false;
+
+function renderHistorico(items) {
+  historicoList.innerHTML = '';
+  if (!items || items.length === 0) {
+    historicoList.innerHTML = '<p class="historico__empty" id="historico-empty">Nenhuma análise ainda. Simule um e-mail novo (🔔) pra começar.</p>';
+    return;
+  }
+  items.forEach((item) => {
+    const bar = document.createElement('div');
+    bar.className = `historico__bar historico__bar--${item.level}`;
+    bar.innerHTML = `
+      <span><strong>${LEVEL_LABEL[item.level]}</strong> · ${item.remetente}</span>
+      <span>${item.quando}</span>
+    `;
+    historicoList.appendChild(bar);
+  });
+}
+
+async function getHistorico() {
+  return (await storage.get('historico')) || [];
+}
+
+// adiciona no topo; se passar de MAX_HISTORICO, remove o mais antigo (FIFO)
+async function addHistorico(level, remetente) {
+  const items = await getHistorico();
+  items.unshift({ level, remetente, quando: formatAgora() });
+  const limitado = items.slice(0, MAX_HISTORICO);
+  await storage.set('historico', limitado);
+  renderHistorico(limitado);
+}
 
 historicoToggle.addEventListener('click', () => {
   historicoExpanded = !historicoExpanded;
@@ -91,6 +155,30 @@ historicoToggle.addEventListener('click', () => {
     : 'Clique para ver seu histórico de ameaças';
 });
 
+// carrega histórico salvo assim que o popup abre
+getHistorico().then(renderHistorico);
+
+// ---------- STATS (persistentes) ----------
+const statEmails = document.getElementById('stat-emails');
+const statAmeacas = document.getElementById('stat-ameacas');
+const statDenuncias = document.getElementById('stat-denuncias');
+
+async function getStats() {
+  return (await storage.get('stats')) || { emails: 0, ameacas: 0, denuncias: 0 };
+}
+async function saveStats(stats) {
+  await storage.set('stats', stats);
+  statEmails.textContent = String(stats.emails).padStart(2, '0');
+  statAmeacas.textContent = String(stats.ameacas).padStart(2, '0');
+  statDenuncias.textContent = String(stats.denuncias).padStart(2, '0');
+}
+const ultimaVerificacaoEl = document.getElementById('ultima-verificacao');
+storage.get('ultimaVerificacao').then((val) => {
+  if (val) ultimaVerificacaoEl.textContent = val;
+});
+
+getStats().then(saveStats);
+
 // ---------- BOTÃO "ATIVAR PROTEÇÃO" ----------
 document.getElementById('btn-ativar-protecao').addEventListener('click', (e) => {
   const btn = e.currentTarget;
@@ -100,10 +188,11 @@ document.getElementById('btn-ativar-protecao').addEventListener('click', (e) => 
 });
 
 // ---------- BOTÃO "DENUNCIAR" ----------
-document.getElementById('btn-denunciar').addEventListener('click', (e) => {
+document.getElementById('btn-denunciar').addEventListener('click', async (e) => {
   const btn = e.currentTarget;
-  const counter = document.getElementById('stat-denuncias');
-  counter.textContent = String(Number(counter.textContent) + 1).padStart(2, '0');
+  const stats = await getStats();
+  stats.denuncias += 1;
+  await saveStats(stats);
   btn.textContent = 'Denunciado ✓';
   btn.disabled = true;
   btn.style.opacity = '0.75';
@@ -151,21 +240,29 @@ document.getElementById('btn-me-proteger').addEventListener('click', () => {
     progressBar.style.width = '100%';
   });
 
-  setTimeout(() => {
+  setTimeout(async () => {
     hideOverlays();
 
-    // atualiza contador de e-mails analisados
-    const emailCounter = document.getElementById('stat-emails');
-    emailCounter.textContent = String(Number(emailCounter.textContent) + 1).padStart(2, '0');
+    // atualiza contador de e-mails analisados (persistente)
+    const stats = await getStats();
+    stats.emails += 1;
 
     // sorteia um nível de ameaça pra demonstrar o resultado
     const levels = ['alto', 'medio', 'baixo'];
     const result = levels[Math.floor(Math.random() * levels.length)];
     if (result !== 'baixo') {
-      const ameacaCounter = document.getElementById('stat-ameacas');
-      ameacaCounter.textContent = String(Number(ameacaCounter.textContent) + 1).padStart(2, '0');
+      stats.ameacas += 1;
     }
+    await saveStats(stats);
     renderThreat(result);
+
+    // registra no histórico (mantém só os 3 mais recentes)
+    await addHistorico(result, 'fulanoDeTal@gmail.com');
+
+    // atualiza "última verificação"
+    const agora = formatAgora();
+    ultimaVerificacaoEl.textContent = agora;
+    await storage.set('ultimaVerificacao', agora);
 
     // leva o usuário para a tela de ameaças com o resultado
     navButtons.forEach(b => b.classList.remove('active'));
