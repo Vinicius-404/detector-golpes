@@ -309,6 +309,7 @@ function hideOverlays() {
 
 // botão do sino simula a chegada de um novo e-mail (fluxo de demonstração)
 document.getElementById('btn-simulate-email').addEventListener('click', () => {
+  document.getElementById('protecao-warning').style.display = 'none';
   showOverlay(overlayNewEmail);
 });
 
@@ -362,6 +363,25 @@ async function analisarEmail(sample) {
   }
 }
 
+// Preenche a lista de motivos; se vier vazia (o classificador de regras não
+// achou nenhuma palavra-chave suspeita, mesmo que o modelo de ML tenha dado
+// um score alto), mostra uma frase explicando isso em vez de deixar em branco.
+function renderListaMotivos(lista, motivos) {
+  lista.innerHTML = '';
+  if (motivos && motivos.length > 0) {
+    motivos.forEach(m => {
+      const li = document.createElement('li');
+      li.textContent = m;
+      lista.appendChild(li);
+    });
+  } else {
+    const li = document.createElement('li');
+    li.textContent = 'Nenhuma palavra-chave suspeita identificada pelas regras (o nível de risco acima vem do modelo de machine learning).';
+    li.style.fontStyle = 'italic';
+    lista.appendChild(li);
+  }
+}
+
 function renderMotivosERemetente(sample, resultado) {
   threatEmptyEl.style.display = 'none';
   threatCardEl.style.display = 'block';
@@ -370,13 +390,7 @@ function renderMotivosERemetente(sample, resultado) {
   document.getElementById('threat-remetente').textContent = sample.remetente;
   document.getElementById('threat-quando').textContent = quando;
 
-  const lista = document.getElementById('threat-motivos');
-  lista.innerHTML = '';
-  resultado.motivos.forEach(m => {
-    const li = document.createElement('li');
-    li.textContent = m;
-    lista.appendChild(li);
-  });
+  renderListaMotivos(document.getElementById('threat-motivos'), resultado.motivos);
 
   // linha discreta com info do modelo/status do backend
   let infoEl = document.getElementById('threat-model-info');
@@ -417,13 +431,7 @@ storage.get('ultimoResultado').then((ultimo) => {
   document.getElementById('threat-remetente').textContent = ultimo.remetente;
   document.getElementById('threat-quando').textContent = ultimo.quando;
 
-  const lista = document.getElementById('threat-motivos');
-  lista.innerHTML = '';
-  ultimo.motivos.forEach(m => {
-    const li = document.createElement('li');
-    li.textContent = m;
-    lista.appendChild(li);
-  });
+  renderListaMotivos(document.getElementById('threat-motivos'), ultimo.motivos);
 
   let infoEl = document.getElementById('threat-model-info');
   if (!infoEl) {
@@ -487,7 +495,28 @@ async function tentarExtrairEmailDaAbaAtiva() {
   }
 }
 
-document.getElementById('btn-me-proteger').addEventListener('click', () => {
+// se o usuário tenta analisar um e-mail sem ter clicado em "Ativar proteção"
+// primeiro, mostra um aviso e leva ele de volta pro Início com o botão
+// "Ativar proteção" destacado, em vez de rodar a análise.
+async function irParaInicioEDestacarAtivarProtecao() {
+  hideOverlays();
+  document.getElementById('protecao-warning').style.display = 'none';
+  navButtons.forEach(b => b.classList.remove('active'));
+  document.querySelector('.navbtn[data-screen="inicio"]').classList.add('active');
+  screens.forEach(s => s.classList.toggle('active', s.id === 'screen-inicio'));
+
+  btnAtivarProtecao.classList.add('btn--pulse');
+  setTimeout(() => btnAtivarProtecao.classList.remove('btn--pulse'), 3200);
+}
+
+document.getElementById('btn-me-proteger').addEventListener('click', async () => {
+  const protecaoAtivada = await storage.get('protecaoAtivada');
+  if (!protecaoAtivada) {
+    document.getElementById('protecao-warning').style.display = 'block';
+    setTimeout(irParaInicioEDestacarAtivarProtecao, 1400);
+    return;
+  }
+
   showOverlay(overlayAnalise);
   progressBar.style.width = '0%';
 

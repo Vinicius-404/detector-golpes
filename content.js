@@ -49,6 +49,22 @@ function extrairEmailGmail() {
   };
 }
 
+// Extrai só o endereço de e-mail de dentro de um texto (remove rótulos como
+// "Para:", "De:", nome de exibição, etc. — sempre devolve algo como
+// "fulano@dominio.com" ou null se não achar nada parecido com e-mail).
+function extrairEnderecoEmail(texto) {
+  if (!texto) return null;
+  const match = texto.match(/[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+/);
+  return match ? match[0] : null;
+}
+
+// Um elemento "parece destinatário" (Para/To/Cc/Cco/Bcc) quando o texto dele
+// começa com um desses rótulos — nesse caso NÃO é o remetente, é quem
+// recebeu a mensagem, e deve ser descartado na hora de achar o "De:".
+function pareceCampoDestinatario(texto) {
+  return /^\s*(para|to|cc|cco|bcc)\s*:/i.test(texto || '');
+}
+
 // Extrai o e-mail aberto no Outlook (versão web - outlook.live.com / outlook.office.com).
 // Obs: o Outlook Web usa classes CSS geradas dinamicamente (ofuscadas), que
 // mudam a cada atualização da Microsoft. Por isso usamos seletores baseados
@@ -61,52 +77,17 @@ function extrairEmailOutlook() {
   // o assunto costuma estar num heading (h1/h2) dentro do painel de leitura
   const assuntoEl = painel.querySelector('h1, h2, [role="heading"]');
 
-  // Estratégia 1 (mais robusta): varre o texto do cabeçalho linha por linha
-  // procurando um endereço de e-mail (padrão "algo@algo.algo"), pulando
-  // qualquer linha que comece com "Para:"/"To:"/"Cc:" (destinatário, não remetente).
-  // Cobre tanto o caso do e-mail aparecer como link (mailto:) quanto como
-  // texto puro (ex: "Indeed<no-reply@indeed.com>").
-  const textoCabecalho = (painel.innerText || '').slice(0, 1000);
-  const linhasCabecalho = textoCabecalho.split('\n').map(l => l.trim()).filter(Boolean);
-
-  let remetenteEmail = null;
-  let remetenteNome = null;
-
-  for (const linha of linhasCabecalho) {
-    const match = linha.match(/[\w.+-]+@[\w-]+\.[\w.-]+/);
-    if (!match) continue;
-
-    const ehDestinatario = /^(para|to|cc|cco|bcc)\s*:/i.test(linha);
-    if (ehDestinatario) continue; // pula "Para:"/"To:", que é o destinatário
-
-    remetenteEmail = match[0];
-    // tenta pegar o nome antes do "<email>", se existir (ex: "Indeed<...>")
-    remetenteNome = linha.replace(/<.*$/, '').trim() || null;
-    break;
-  }
-
-  if (!remetenteEmail) {
-    // Estratégia 2 (fallback): procura um link mailto: que não seja destinatário
-    const linksMailto = Array.from(painel.querySelectorAll('a[href^="mailto:"]'));
-    const linkRemetente = linksMailto.find(link => {
-      const contexto = (link.closest('div, li, tr')?.textContent || '').trim().toLowerCase();
-      return !/^(para|to|cc|cco|bcc)\s*:/.test(contexto);
-    }) || linksMailto[0];
-
-    if (linkRemetente) {
-      remetenteEmail = decodeURIComponent(linkRemetente.getAttribute('href').replace('mailto:', '').split('?')[0]);
-      remetenteNome = linkRemetente.textContent?.trim() || null;
-    }
-  }
-
-  if (!remetenteEmail) {
-    // Estratégia 3 (último recurso): título/aria-label com "@"
-    const remetenteEl =
-      painel.querySelector('[title*="@"]') ||
-      painel.querySelector('[aria-label*="@"]');
-    remetenteEmail = remetenteEl?.getAttribute('title') || null;
-    remetenteNome = remetenteEl?.textContent?.trim() || null;
-  }
+  // Pega TODOS os elementos com "@" no title/aria-label (o painel mostra
+  // várias linhas: De/From, Para/To, Cc...) e descarta os que claramente
+  // são de destinatário ("Para:", "To:", "Cc:", "Cco:"). O primeiro que
+  // sobrar tende a ser o remetente, que o Outlook sempre lista primeiro.
+  const candidatos = Array.from(
+    painel.querySelectorAll('[title*="@"], [aria-label*="@"]')
+  );
+  const remetenteEl = candidatos.find((el) => {
+    const texto = el.getAttribute('title') || el.getAttribute('aria-label') || '';
+    return !pareceCampoDestinatario(texto);
+  }) || null;
 
   // o corpo do e-mail costuma ficar num iframe ou div marcado como conteúdo da mensagem
   const corpoFrame = painel.querySelector('iframe');
@@ -124,13 +105,16 @@ function extrairEmailOutlook() {
     corpoTexto = corpoDiv?.innerText?.trim() || null;
   }
 
-  if (!assuntoEl && !remetenteEmail && !remetenteNome && !corpoTexto) {
+  if (!assuntoEl && !remetenteEl && !corpoTexto) {
     return null;
   }
 
+  const remetenteTexto = remetenteEl?.getAttribute('title') || remetenteEl?.getAttribute('aria-label') || remetenteEl?.textContent || null;
+
   return {
-    // prioriza o e-mail de verdade; se só achou o nome, manda o nome mesmo
-    remetente: remetenteEmail || remetenteNome || null,
+    // sempre devolve só o endereço limpo (sem "Para:"/"De:"/nome de exibição);
+    // se por algum motivo não achar um e-mail válido no texto, cai pro texto cru
+    remetente: extrairEnderecoEmail(remetenteTexto) || remetenteTexto,
     assunto: assuntoEl?.textContent?.trim() || null,
     corpo: corpoTexto
   };
