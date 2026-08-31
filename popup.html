@@ -127,22 +127,20 @@
         <h3>Configurações</h3>
         <ul class="config-list">
           <li class="config-item">
-            <label class="switch"><input type="checkbox" checked><span class="slider"></span></label>
-            <span>Lorem ipsum dolor sit amet,</span>
+            <label class="switch"><input type="checkbox" id="cfg-notificacoes" checked><span class="slider"></span></label>
+            <span>Avisar quando encontrar uma ameaça</span>
           </li>
           <li class="config-item">
-            <label class="switch"><input type="checkbox" checked><span class="slider"></span></label>
-            <span>consectetur adipiscing elit</span>
-          </li>
-          <li class="config-item">
-            <label class="switch"><input type="checkbox"><span class="slider"></span></label>
-            <span>Ut sagittis augue eget lectus viverra fermentum</span>
-          </li>
-          <li class="config-item">
-            <label class="switch"><input type="checkbox" checked><span class="slider"></span></label>
-            <span>Suspendisse id tortor sed nisl mollis consequat et at felis</span>
+            <label class="switch"><input type="checkbox" id="cfg-som" checked><span class="slider"></span></label>
+            <span>Tocar som de alerta</span>
           </li>
         </ul>
+      </div>
+
+      <div class="card config-card">
+        <h3>Meus dados</h3>
+        <p class="config-desc">Isso apaga seu histórico de ameaças e as estatísticas da tela inicial.</p>
+        <button class="btn btn--outline" id="btn-limpar-dados">Limpar histórico e estatísticas</button>
       </div>
     </section>
 

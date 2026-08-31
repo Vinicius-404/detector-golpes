@@ -198,6 +198,47 @@ storage.get('ultimaVerificacao').then((val) => {
 
 getStats().then(saveStats);
 
+// ---------- CONFIGURAÇÕES ----------
+const cfgNotificacoes = document.getElementById('cfg-notificacoes');
+const cfgSom = document.getElementById('cfg-som');
+
+// carrega as preferências salvas (por padrão, ambas ligadas)
+storage.get('cfgNotificacoes').then((val) => {
+  cfgNotificacoes.checked = val === undefined ? true : val;
+});
+storage.get('cfgSom').then((val) => {
+  cfgSom.checked = val === undefined ? true : val;
+});
+
+cfgNotificacoes.addEventListener('change', () => {
+  storage.set('cfgNotificacoes', cfgNotificacoes.checked);
+});
+cfgSom.addEventListener('change', () => {
+  storage.set('cfgSom', cfgSom.checked);
+});
+
+// botão "Limpar histórico e estatísticas"
+document.getElementById('btn-limpar-dados').addEventListener('click', async (e) => {
+  const btn = e.currentTarget;
+  const confirmar = window.confirm('Isso vai apagar seu histórico de ameaças e as estatísticas. Deseja continuar?');
+  if (!confirmar) return;
+
+  await storage.set('historico', []);
+  await storage.set('stats', { emails: 0, ameacas: 0, denuncias: 0 });
+  await storage.set('ultimoResultado', null);
+
+  renderHistorico([]);
+  await saveStats({ emails: 0, ameacas: 0, denuncias: 0 });
+
+  threatEmptyEl.style.display = 'block';
+  threatCardEl.style.display = 'none';
+  resetarBotaoDenunciar(btnDenunciar);
+
+  const originalText = btn.textContent;
+  btn.textContent = 'Dados apagados ✓';
+  setTimeout(() => { btn.textContent = originalText; }, 1800);
+});
+
 // ---------- BOTÃO "ATIVAR PROTEÇÃO" ----------
 const btnAtivarProtecao = document.getElementById('btn-ativar-protecao');
 
@@ -396,6 +437,56 @@ storage.get('ultimoResultado').then((ultimo) => {
   if (ultimo.denunciado) marcarDenunciado(btnDenunciar);
 });
 
+// tenta pegar o e-mail real aberto na aba ativa (Gmail/Outlook) via
+// content.js; se não conseguir (aba errada, nenhum e-mail aberto, extensão
+// sem permissão, etc.), usa null e quem chamar decide o fallback
+async function tentarExtrairEmailDaAbaAtiva() {
+  const [aba] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!aba?.id || !aba?.url) return null;
+
+  // só faz sentido pedir permissão/ler se a aba for Gmail ou Outlook
+  const ehGmailOuOutlook =
+    aba.url.includes('mail.google.com') ||
+    aba.url.includes('outlook.live.com') ||
+    aba.url.includes('outlook.office.com');
+  if (!ehGmailOuOutlook) return null;
+
+  const origin = new URL(aba.url).origin + '/*';
+  let permissaoConcedidaAgora = false;
+
+  try {
+    // pede a permissão sempre (mesmo que já tenha sido concedida antes,
+    // a gente remove ela no "finally", então nunca fica "lembrada")
+    permissaoConcedidaAgora = await chrome.permissions.request({ origins: [origin] });
+    if (!permissaoConcedidaAgora) return null; // usuário negou a permissão
+
+    // injeta o content.js na aba (não é mais carregado automaticamente,
+    // já que a permissão agora é opcional/sob demanda)
+    await chrome.scripting.executeScript({
+      target: { tabId: aba.id },
+      files: ['content.js']
+    });
+
+    const resposta = await chrome.tabs.sendMessage(aba.id, { tipo: 'EXTRAIR_EMAIL_ATUAL' });
+    if (!resposta || !resposta.corpo) return null; // nada útil extraído
+
+    return {
+      remetente: resposta.remetente || 'remetente não identificado',
+      email_subject: resposta.assunto || '',
+      email_text: resposta.corpo
+    };
+  } catch (err) {
+    // sem content script na aba, permissão negada, ou aba não respondeu
+    return null;
+  } finally {
+    // sempre remove a permissão no final, dando erro ou não, pra ela ser
+    // pedida de novo da próxima vez que clicar em "Me proteger!"
+    if (permissaoConcedidaAgora) {
+      await chrome.permissions.remove({ origins: [origin] });
+    }
+  }
+}
+
 document.getElementById('btn-me-proteger').addEventListener('click', () => {
   showOverlay(overlayAnalise);
   progressBar.style.width = '0%';
@@ -404,10 +495,11 @@ document.getElementById('btn-me-proteger').addEventListener('click', () => {
     progressBar.style.width = '100%';
   });
 
-  // sorteia um dos e-mails de exemplo pra simular a chegada de um e-mail real
-  const sample = SAMPLE_EMAILS[Math.floor(Math.random() * SAMPLE_EMAILS.length)];
-
   (async () => {
+    // primeiro tenta o e-mail real da aba aberta; se não der, usa exemplo
+    const emailReal = await tentarExtrairEmailDaAbaAtiva();
+    const sample = emailReal || SAMPLE_EMAILS[Math.floor(Math.random() * SAMPLE_EMAILS.length)];
+
     const resultado = await analisarEmail(sample);
 
     hideOverlays();
