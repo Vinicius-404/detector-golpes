@@ -1,30 +1,6 @@
 // ---------- CONFIG DA API ----------
 const API_URL = 'http://localhost:8000/analisar-email';
 
-// e-mails de exemplo usados na demonstração (a extração do e-mail real
-// da página do Gmail/Outlook ainda não existe, ver README)
-const SAMPLE_EMAILS = [
-  {
-    remetente: 'suporte@banc0-seguro.com',
-    email_subject: 'Sua conta será bloqueada em 24 horas',
-    email_text: 'Prezado cliente, identificamos uma atividade suspeita em sua conta. ' +
-      'Para evitar o bloqueio em 24 horas, clique no link abaixo e confirme seus dados ' +
-      'bancários e senha imediatamente. Ação urgente necessária.'
-  },
-  {
-    remetente: 'premios@sorteio-nacional.info',
-    email_subject: 'Parabéns! Você ganhou um prêmio',
-    email_text: 'Parabéns! Seu e-mail foi sorteado e você ganhou um prêmio em dinheiro. ' +
-      'Para resgatar, confirme seus dados pessoais e a taxa de liberação imediatamente via PIX.'
-  },
-  {
-    remetente: 'equipe@newsletter-tech.com',
-    email_subject: 'Resumo semanal de notícias de tecnologia',
-    email_text: 'Olá! Segue o resumo das principais notícias de tecnologia desta semana, ' +
-      'incluindo lançamentos de produtos e artigos sobre inteligência artificial.'
-  }
-];
-
 // ---------- STORAGE (chrome.storage.local, com fallback para testes fora da extensão) ----------
 const storage = {
   get(key) {
@@ -95,6 +71,14 @@ let currentLevel = 'alto';
 // ---------- NAVEGAÇÃO ENTRE TELAS (bottom nav) ----------
 const navButtons = document.querySelectorAll('.navbtn');
 const screens = document.querySelectorAll('.screen');
+const btnSino = document.getElementById('btn-simulate-email');
+
+// o sino (que abre o fluxo de "novo e-mail detectado") só faz sentido
+// na tela Início — nas outras abas ele fica escondido
+function atualizarVisibilidadeSino() {
+  const inicioEstaAtivo = document.getElementById('screen-inicio').classList.contains('active');
+  btnSino.style.visibility = inicioEstaAtivo ? 'visible' : 'hidden';
+}
 
 navButtons.forEach(btn => {
   btn.addEventListener('click', () => {
@@ -102,8 +86,11 @@ navButtons.forEach(btn => {
     btn.classList.add('active');
     const target = btn.dataset.screen;
     screens.forEach(s => s.classList.toggle('active', s.id === `screen-${target}`));
+    atualizarVisibilidadeSino();
   });
 });
+
+atualizarVisibilidadeSino();
 
 // ---------- RENDER DO CARD DE AMEAÇA ----------
 function renderThreat(level) {
@@ -239,23 +226,36 @@ document.getElementById('btn-limpar-dados').addEventListener('click', async (e) 
   setTimeout(() => { btn.textContent = originalText; }, 1800);
 });
 
-// ---------- BOTÃO "ATIVAR PROTEÇÃO" ----------
+// ---------- BOTÃO "ATIVAR PROTEÇÃO" (liga/desliga) ----------
 const btnAtivarProtecao = document.getElementById('btn-ativar-protecao');
 
-function marcarProtecaoAtivada(btn) {
-  btn.textContent = 'Proteção ativada ✓';
-  btn.disabled = true;
-  btn.style.opacity = '0.75';
+function renderBotaoProtecao(btn, ativada) {
+  if (ativada) {
+    btn.textContent = 'Proteção ativada ✓';
+    btn.classList.add('btn--ativo');
+  } else {
+    btn.textContent = 'Ativar proteção';
+    btn.classList.remove('btn--ativo');
+  }
 }
 
 btnAtivarProtecao.addEventListener('click', async (e) => {
-  marcarProtecaoAtivada(e.currentTarget);
-  await storage.set('protecaoAtivada', true);
+  const btn = e.currentTarget;
+  const ativadaAtualmente = await storage.get('protecaoAtivada');
+  const novoEstado = !ativadaAtualmente;
+  renderBotaoProtecao(btn, novoEstado);
+  await storage.set('protecaoAtivada', novoEstado);
+
+  // ao ATIVAR (não ao desativar), leva o usuário direto pra tela de
+  // "novo e-mail", já que é o próximo passo natural do fluxo
+  if (novoEstado) {
+    setTimeout(irParaTelaNovoEmail, 200);
+  }
 });
 
 // ao abrir o popup, recarrega o estado salvo do botão de proteção
 storage.get('protecaoAtivada').then((ativada) => {
-  if (ativada) marcarProtecaoAtivada(btnAtivarProtecao);
+  renderBotaoProtecao(btnAtivarProtecao, !!ativada);
 });
 
 // ---------- BOTÃO "DENUNCIAR" ----------
@@ -288,39 +288,91 @@ btnDenunciar.addEventListener('click', async (e) => {
   }
 });
 
-// ---------- OVERLAYS: NOVO E-MAIL -> ANÁLISE -> RESULTADO ----------
-const overlayNewEmail = document.getElementById('overlay-newemail');
+// ---------- OVERLAY DE ANÁLISE + CARD EMBUTIDO "NOVO E-MAIL" ----------
 const overlayAnalise = document.getElementById('overlay-analise');
 const bottomnav = document.getElementById('bottomnav');
 const progressBar = document.getElementById('progress-bar');
 
 function showOverlay(overlay) {
   bottomnav.style.display = 'none';
-  overlayNewEmail.classList.remove('active');
   overlayAnalise.classList.remove('active');
   overlay.classList.add('active');
 }
 
 function hideOverlays() {
-  overlayNewEmail.classList.remove('active');
   overlayAnalise.classList.remove('active');
   bottomnav.style.display = 'flex';
 }
 
-// botão do sino simula a chegada de um novo e-mail (fluxo de demonstração)
-document.getElementById('btn-simulate-email').addEventListener('click', () => {
-  document.getElementById('protecao-warning').style.display = 'none';
-  showOverlay(overlayNewEmail);
-});
+// guarda o e-mail já extraído da aba ativa, pra não precisar extrair de
+// novo quando o usuário clicar em "Analisar agora"
+let emailExtraidoAtual = null;
 
-// botões de voltar dos overlays -> volta pra tela de início
+const elCarregandoEmail = document.getElementById('carregando-email');
+const elEmailPreview = document.getElementById('email-preview');
+const elPreviewRemetente = document.getElementById('preview-remetente');
+const elPreviewAssunto = document.getElementById('preview-assunto');
+const elNovoEmailDesc = document.getElementById('novoemail-desc');
+const elBtnMeProteger = document.getElementById('btn-me-proteger');
+const elBtnVoltarNovoEmail = document.getElementById('btn-voltar-novoemail');
+
+// volta pra tela de início a partir da tela "novo e-mail" (mesmo destino
+// do botão "início" da barra inferior)
+function voltarParaInicioDeNovoEmail() {
+  document.querySelector('.navbtn[data-screen="inicio"]').click();
+}
+elBtnVoltarNovoEmail.addEventListener('click', voltarParaInicioDeNovoEmail);
+
+// leva pra tela "novo e-mail detectado" (mesmo padrão de tamanho das
+// outras telas — não é mais overlay nem card embutido no Início) e já
+// tenta extrair o e-mail da aba ativa pra mostrar remetente/assunto
+// antes de perguntar se o usuário quer analisar
+async function irParaTelaNovoEmail() {
+  document.getElementById('protecao-warning').style.display = 'none';
+  document.getElementById('extracao-erro').style.display = 'none';
+  elEmailPreview.style.display = 'none';
+  elNovoEmailDesc.style.display = 'none';
+  elBtnMeProteger.style.display = 'none';
+  elBtnVoltarNovoEmail.style.display = 'none';
+  elCarregandoEmail.style.display = 'block';
+  emailExtraidoAtual = null;
+
+  screens.forEach(s => s.classList.toggle('active', s.id === 'screen-novoemail'));
+  atualizarVisibilidadeSino();
+
+  const emailReal = await tentarExtrairEmailDaAbaAtiva();
+  elCarregandoEmail.style.display = 'none';
+
+  if (!emailReal) {
+    document.getElementById('extracao-erro').style.display = 'block';
+    elBtnVoltarNovoEmail.style.display = 'block';
+    // não deu pra ler o e-mail, então desativa a proteção: ao voltar pro
+    // início, o botão já aparece como "Ativar proteção" (não fica marcado
+    // como ativado sem nunca ter analisado nada)
+    await storage.set('protecaoAtivada', false);
+    renderBotaoProtecao(btnAtivarProtecao, false);
+    return;
+  }
+
+  emailExtraidoAtual = emailReal;
+  elPreviewRemetente.textContent = emailReal.remetente;
+  elPreviewAssunto.textContent = emailReal.email_subject || '(sem assunto)';
+  elEmailPreview.style.display = 'block';
+  elNovoEmailDesc.style.display = 'block';
+  elBtnMeProteger.style.display = 'block';
+}
+
+// botão do sino leva direto pra tela de novo e-mail
+document.getElementById('btn-simulate-email').addEventListener('click', irParaTelaNovoEmail);
+
+// botão de voltar do overlay de análise -> volta pra tela de início
 function backToInicio() {
   hideOverlays();
   navButtons.forEach(b => b.classList.remove('active'));
   document.querySelector('.navbtn[data-screen="inicio"]').classList.add('active');
   screens.forEach(s => s.classList.toggle('active', s.id === 'screen-inicio'));
+  atualizarVisibilidadeSino();
 }
-document.getElementById('btn-back-newemail').addEventListener('click', backToInicio);
 document.getElementById('btn-back-analise').addEventListener('click', backToInicio);
 
 // chama a API real; se falhar (backend fora do ar, CORS, etc.),
@@ -449,20 +501,22 @@ storage.get('ultimoResultado').then((ultimo) => {
 // content.js; se não conseguir (aba errada, nenhum e-mail aberto, extensão
 // sem permissão, etc.), usa null e quem chamar decide o fallback
 async function tentarExtrairEmailDaAbaAtiva() {
-  const [aba] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!aba?.id || !aba?.url) return null;
-
-  // só faz sentido pedir permissão/ler se a aba for Gmail ou Outlook
-  const ehGmailOuOutlook =
-    aba.url.includes('mail.google.com') ||
-    aba.url.includes('outlook.live.com') ||
-    aba.url.includes('outlook.office.com');
-  if (!ehGmailOuOutlook) return null;
-
-  const origin = new URL(aba.url).origin + '/*';
+  let origin = null;
   let permissaoConcedidaAgora = false;
 
   try {
+    const [aba] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!aba?.id || !aba?.url) return null;
+
+    // só faz sentido pedir permissão/ler se a aba for Gmail ou Outlook
+    const ehGmailOuOutlook =
+      aba.url.includes('mail.google.com') ||
+      aba.url.includes('outlook.live.com') ||
+      aba.url.includes('outlook.office.com');
+    if (!ehGmailOuOutlook) return null;
+
+    origin = new URL(aba.url).origin + '/*';
+
     // pede a permissão sempre (mesmo que já tenha sido concedida antes,
     // a gente remove ela no "finally", então nunca fica "lembrada")
     permissaoConcedidaAgora = await chrome.permissions.request({ origins: [origin] });
@@ -484,26 +538,26 @@ async function tentarExtrairEmailDaAbaAtiva() {
       email_text: resposta.corpo
     };
   } catch (err) {
-    // sem content script na aba, permissão negada, ou aba não respondeu
+    // sem content script na aba, permissão negada, aba não respondeu,
+    // ou qualquer outro erro inesperado nas APIs do Chrome
     return null;
   } finally {
     // sempre remove a permissão no final, dando erro ou não, pra ela ser
     // pedida de novo da próxima vez que clicar em "Me proteger!"
-    if (permissaoConcedidaAgora) {
-      await chrome.permissions.remove({ origins: [origin] });
+    if (permissaoConcedidaAgora && origin) {
+      try { await chrome.permissions.remove({ origins: [origin] }); } catch (e) { /* ignora */ }
     }
   }
 }
 
 // se o usuário tenta analisar um e-mail sem ter clicado em "Ativar proteção"
-// primeiro, mostra um aviso e leva ele de volta pro Início com o botão
-// "Ativar proteção" destacado, em vez de rodar a análise.
-async function irParaInicioEDestacarAtivarProtecao() {
-  hideOverlays();
-  document.getElementById('protecao-warning').style.display = 'none';
+// primeiro, mostra um aviso e depois leva de volta pro Início, destacando
+// o botão "Ativar proteção" (agora fica numa tela separada da de "novo e-mail")
+function irParaInicioEDestacarAtivarProtecao() {
   navButtons.forEach(b => b.classList.remove('active'));
   document.querySelector('.navbtn[data-screen="inicio"]').classList.add('active');
   screens.forEach(s => s.classList.toggle('active', s.id === 'screen-inicio'));
+  atualizarVisibilidadeSino();
 
   btnAtivarProtecao.classList.add('btn--pulse');
   setTimeout(() => btnAtivarProtecao.classList.remove('btn--pulse'), 3200);
@@ -517,6 +571,18 @@ document.getElementById('btn-me-proteger').addEventListener('click', async () =>
     return;
   }
 
+  // usa o e-mail já extraído quando a tela abriu; se por algum motivo
+  // não tiver (ex: aba mudou nesse meio-tempo), mostra o erro de novo
+  // e desativa a proteção, assim como no erro de extração inicial
+  if (!emailExtraidoAtual) {
+    document.getElementById('extracao-erro').style.display = 'block';
+    elBtnVoltarNovoEmail.style.display = 'block';
+    elBtnMeProteger.style.display = 'none';
+    await storage.set('protecaoAtivada', false);
+    renderBotaoProtecao(btnAtivarProtecao, false);
+    return;
+  }
+
   showOverlay(overlayAnalise);
   progressBar.style.width = '0%';
 
@@ -525,37 +591,44 @@ document.getElementById('btn-me-proteger').addEventListener('click', async () =>
   });
 
   (async () => {
-    // primeiro tenta o e-mail real da aba aberta; se não der, usa exemplo
-    const emailReal = await tentarExtrairEmailDaAbaAtiva();
-    const sample = emailReal || SAMPLE_EMAILS[Math.floor(Math.random() * SAMPLE_EMAILS.length)];
+    try {
+      const emailReal = emailExtraidoAtual;
 
-    const resultado = await analisarEmail(sample);
+      const resultado = await analisarEmail(emailReal);
 
-    hideOverlays();
+      hideOverlays();
 
-    // atualiza contador de e-mails analisados (persistente)
-    const stats = await getStats();
-    stats.emails += 1;
+      // atualiza contador de e-mails analisados (persistente)
+      const stats = await getStats();
+      stats.emails += 1;
 
-    const result = resultado.risco;
-    if (result !== 'baixo') {
-      stats.ameacas += 1;
+      const result = resultado.risco;
+      if (result !== 'baixo') {
+        stats.ameacas += 1;
+      }
+      await saveStats(stats);
+      renderThreat(result);
+      renderMotivosERemetente(emailReal, resultado);
+
+      // registra no histórico (mantém só os 3 mais recentes)
+      await addHistorico(result, emailReal.remetente);
+
+      // atualiza "última verificação"
+      const agora = formatAgora();
+      ultimaVerificacaoEl.textContent = agora;
+      await storage.set('ultimaVerificacao', agora);
+
+      // leva o usuário para a tela de ameaças com o resultado
+      navButtons.forEach(b => b.classList.remove('active'));
+      document.querySelector('.navbtn[data-screen="ameacas"]').classList.add('active');
+      screens.forEach(s => s.classList.toggle('active', s.id === 'screen-ameacas'));
+      atualizarVisibilidadeSino();
+    } catch (err) {
+      // rede de segurança: qualquer erro inesperado no meio do processo
+      // volta pro aviso de erro em vez de travar na tela "Em análise"
+      console.error('Falha ao analisar o e-mail:', err);
+      hideOverlays();
+      document.getElementById('extracao-erro').style.display = 'block';
     }
-    await saveStats(stats);
-    renderThreat(result);
-    renderMotivosERemetente(sample, resultado);
-
-    // registra no histórico (mantém só os 3 mais recentes)
-    await addHistorico(result, sample.remetente);
-
-    // atualiza "última verificação"
-    const agora = formatAgora();
-    ultimaVerificacaoEl.textContent = agora;
-    await storage.set('ultimaVerificacao', agora);
-
-    // leva o usuário para a tela de ameaças com o resultado
-    navButtons.forEach(b => b.classList.remove('active'));
-    document.querySelector('.navbtn[data-screen="ameacas"]').classList.add('active');
-    screens.forEach(s => s.classList.toggle('active', s.id === 'screen-ameacas'));
   })();
 });

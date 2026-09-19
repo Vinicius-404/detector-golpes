@@ -18,8 +18,15 @@
 
 *{box-sizing:border-box;}
 
+html{
+  width:360px;
+  overflow-x:hidden;
+}
+
 body{
   margin:0;
+  width:360px;
+  overflow-x:hidden;
   font-family:'Segoe UI', Roboto, Arial, sans-serif;
   background:var(--gray-bg);
   color:var(--text);
@@ -27,6 +34,7 @@ body{
 
 .app{
   width:360px;
+  max-width:360px;
   min-height:560px;
   display:flex;
   flex-direction:column;
@@ -126,6 +134,19 @@ body{
   gap:10px;
   padding:20px 16px;
 }
+.card--hero--compact{
+  padding:14px 16px;
+  align-items:stretch;
+}
+.card--hero__row{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  text-align:left;
+}
+.card--hero__row h2{margin:0; font-size:14.5px;}
+.icon-badge--sm{ width:32px; height:32px; }
+
 .icon-badge{
   width:64px; height:64px;
   border-radius:50%;
@@ -155,6 +176,7 @@ body{
 .btn:hover{filter:brightness(1.08);}
 .btn:active{transform:scale(.98);}
 .btn--purple{background:var(--purple);}
+.btn--purple.btn--ativo{background:var(--purple-dark);}
 .btn--red{background:var(--red);}
 .btn--green{background:var(--green-dark);}
 .btn--outline{
@@ -174,31 +196,29 @@ body{
 /* ---------- RESUMO ---------- */
 .card--resumo h3{margin:0 0 10px; font-size:14px;}
 .resumo__grid{
-  display:grid;
-  grid-template-columns:repeat(3,1fr);
-  gap:8px;
-}
-.resumo__item{
-  background:var(--gray-bg);
-  border-radius:10px;
-  padding:10px 6px;
   display:flex;
   flex-direction:column;
+  gap:10px;
+}
+.resumo__item{
+  display:flex;
   align-items:center;
-  text-align:center;
-  gap:4px;
+  gap:12px;
+  text-align:left;
 }
 .resumo__icon{
-  width:24px; height:24px;
+  width:34px; height:34px;
   border-radius:50%;
   display:flex; align-items:center; justify-content:center;
   color:#fff;
+  flex-shrink:0;
 }
 .resumo__icon--envelope{background:var(--purple);}
 .resumo__icon--shield{background:var(--red);}
 .resumo__icon--flag{background:var(--orange);}
+.resumo__item-text{display:flex; flex-direction:column;}
 .resumo__num{font-size:14px; font-weight:700;}
-.resumo__label{font-size:9.5px; color:var(--text-soft); line-height:1.2;}
+.resumo__label{font-size:11px; color:var(--text-soft); line-height:1.2;}
 
 /* ---------- ULTIMA VERIFICACAO ---------- */
 .card--ultima{
@@ -409,6 +429,33 @@ body{
   animation:fadeIn .25s ease;
 }
 
+/* aviso neutro de "carregando", reaproveitando o mesmo componente */
+#carregando-email{
+  color:var(--text-soft);
+  background:#EFEFEF;
+}
+
+/* ---------- PREVIEW DO E-MAIL (remetente/assunto) ---------- */
+.email-preview{
+  width:100%;
+  text-align:left;
+  background:#F5F4FA;
+  border-radius:10px;
+  padding:10px 12px;
+  animation:fadeIn .25s ease;
+}
+.email-preview p{
+  margin:0 0 4px;
+  font-size:12px;
+  color:var(--text);
+  line-height:1.4;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.email-preview p:last-child{margin-bottom:0;}
+.email-preview strong{color:var(--text-soft); font-weight:600;}
+
 /* destaque piscante no botão "Ativar proteção", usado pra chamar atenção
    quando o usuário tenta analisar um e-mail sem ter ativado a proteção */
 .btn--pulse{
@@ -417,4 +464,14 @@ body{
 @keyframes pulse{
   0%, 100% { box-shadow: 0 0 0 0 rgba(91,34,176,0.55); }
   50% { box-shadow: 0 0 0 8px rgba(91,34,176,0); }
+}
+
+/* destaque no card "novo e-mail" quando o usuário clica no sino, pra
+   chamar atenção pro card já que ele não abre mais como overlay */
+.card--flash{
+  animation:flash 1.2s ease-in-out;
+}
+@keyframes flash{
+  0%, 100% { box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+  30% { box-shadow: 0 0 0 4px rgba(255,185,35,0.5); }
 }
