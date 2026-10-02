@@ -64,7 +64,7 @@ extension/
 
 ### Simulando o fluxo de detecção
 
-Dentro do popup, clique no sininho 🔔 no topo para simular a chegada de um e-mail novo. Isso abre o overlay de aviso → **"Me proteger!"** → tela de análise → resultado aleatório (Alto/Médio/Baixo) já refletido na aba **Ameaças**.
+Dentro do popup, clique no sininho 🔔 no topo pra abrir a tela "Analisar e-mail" (que já mostra remetente/assunto do e-mail aberto no Gmail/Outlook) → **"Analisar agora"** → tela "Em análise" → resultado (Alto/Médio/Baixo) refletido na aba **Ameaças**.
 
 Também há botões de atalho (**Demo — nível**) na aba Ameaças para alternar rapidamente entre os três estados sem precisar rodar o fluxo completo.
 
@@ -75,7 +75,7 @@ Também há botões de atalho (**Demo — nível**) na aba Ameaças para alterna
 | Cor | Hex | Uso |
 |---|---|---|
 | Roxo primário | `#5B22B0` | Topbar, botões primários, navegação ativa |
-| Verde | `#59CD57` / `#24A522` | Estado seguro, botão "Me proteger" |
+| Verde | `#59CD57` / `#24A522` | Estado seguro, botão "Analisar agora" |
 | Vermelho | `#FF494C` | Ameaça alta, botão "Denunciar" |
 | Laranja | `#FFB923` | Ameaça média, avisos |
 | Cinza claro | `#F1F1F1` | Fundo geral |
