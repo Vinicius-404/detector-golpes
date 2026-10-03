@@ -196,6 +196,12 @@ body{
   border:1.5px solid var(--purple-dark);
 }
 .btn--outline-neutral:hover{filter:none; background:#f6f1fd;}
+.btn--analisar-inicio{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+}
 
 .config-desc{
   margin:0 0 10px;

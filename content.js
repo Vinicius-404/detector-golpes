@@ -45,8 +45,22 @@ function extrairEmailGmail() {
   return {
     remetente: remetenteEl?.getAttribute('email') || remetenteEl?.textContent?.trim() || null,
     assunto: assuntoEl?.textContent?.trim() || null,
-    corpo: corpoEl?.innerText?.trim() || null
+    corpo: corpoEl?.innerText?.trim() || null,
+    links: extrairLinksReais(corpoEl)
   };
+}
+
+// Pega o destino REAL (href) de cada link no corpo do e-mail — não o texto
+// exibido. Isso importa porque o golpe clássico de phishing é mostrar um
+// texto como "www.meubanco.com.br" enquanto o link de verdade aponta pra
+// outro domínio; só olhando o href a gente pega o destino de fato.
+function extrairLinksReais(corpoEl) {
+  if (!corpoEl) return [];
+  const hrefs = Array.from(corpoEl.querySelectorAll('a[href]'))
+    .map((a) => a.href)
+    .filter((href) => href && /^https?:\/\//i.test(href));
+  // remove duplicados mantendo a ordem, e limita a 5 pra não virar uma lista enorme
+  return Array.from(new Set(hrefs)).slice(0, 5);
 }
 
 // Extrai só o endereço de e-mail de dentro de um texto (remove rótulos como
@@ -92,9 +106,12 @@ function extrairEmailOutlook() {
   // o corpo do e-mail costuma ficar num iframe ou div marcado como conteúdo da mensagem
   const corpoFrame = painel.querySelector('iframe');
   let corpoTexto = null;
+  let corpoElParaLinks = null;
   if (corpoFrame) {
     try {
-      corpoTexto = corpoFrame.contentDocument?.body?.innerText?.trim() || null;
+      const corpoDoc = corpoFrame.contentDocument;
+      corpoTexto = corpoDoc?.body?.innerText?.trim() || null;
+      corpoElParaLinks = corpoDoc?.body || null;
     } catch (e) {
       // se o iframe for de outra origem, o navegador bloqueia o acesso
       corpoTexto = null;
@@ -103,6 +120,7 @@ function extrairEmailOutlook() {
   if (!corpoTexto) {
     const corpoDiv = painel.querySelector('[aria-label*="Corpo da mensagem"], [aria-label*="Message body"]');
     corpoTexto = corpoDiv?.innerText?.trim() || null;
+    corpoElParaLinks = corpoDiv || null;
   }
 
   if (!assuntoEl && !remetenteEl && !corpoTexto) {
@@ -116,7 +134,8 @@ function extrairEmailOutlook() {
     // se por algum motivo não achar um e-mail válido no texto, cai pro texto cru
     remetente: extrairEnderecoEmail(remetenteTexto) || remetenteTexto,
     assunto: assuntoEl?.textContent?.trim() || null,
-    corpo: corpoTexto
+    corpo: corpoTexto,
+    links: extrairLinksReais(corpoElParaLinks)
   };
 }
 
@@ -127,12 +146,108 @@ function extrairEmailAtual() {
   return null;
 }
 
+// ---------- DENÚNCIA REAL DE PHISHING (aciona o recurso nativo do próprio
+// Gmail/Outlook, em vez de só marcar algo internamente na extensão) ----------
+//
+// Tanto o Gmail quanto o Outlook Web só expõem "denunciar phishing" como uma
+// ação dentro da própria interface (menu "Mais" > "Denunciar phishing"), não
+// existe uma URL ou API pública pra isso. Por isso, em vez de fingir que
+// denunciamos, a extensão aciona esse mesmo menu nativo por script, como se
+// o usuário tivesse clicado — e avisa honestamente se não conseguir achar
+// os botões (layout pode variar).
+
+function aguardar(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// procura, dentro de uma lista de elementos (por seletor), o primeiro cujo
+// texto visível OU aria-label bate com a regex — funciona tanto em PT-BR
+// quanto em EN, já que buscamos por padrões como /phishing/i
+function encontrarElementoPorTexto(seletor, regexTexto) {
+  const candidatos = Array.from(document.querySelectorAll(seletor));
+  return candidatos.find((el) => {
+    const texto = el.textContent || '';
+    const aria = el.getAttribute('aria-label') || el.getAttribute('data-tooltip') || '';
+    return regexTexto.test(texto.trim()) || regexTexto.test(aria.trim());
+  }) || null;
+}
+
+async function denunciarPhishingGmail() {
+  // botão "Mais" (⋮) da mensagem aberta — geralmente o último na tela é o
+  // da mensagem em foco, já que a lista de e-mails também tem o seu próprio
+  const maisBtn = encontrarElementoPorTexto('[aria-label], [data-tooltip]', /^(mais|more)$/i);
+  if (!maisBtn) {
+    return { sucesso: false, mensagem: 'Não encontramos o menu "Mais" do Gmail nesta tela. Abra o e-mail e denuncie manualmente (⋮ › Denunciar phishing).' };
+  }
+  maisBtn.click();
+  await aguardar(350);
+
+  const itemPhishing = encontrarElementoPorTexto('div[role="menuitem"], span, div', /phishing/i);
+  if (!itemPhishing) {
+    return { sucesso: false, mensagem: 'Abrimos o menu "Mais", mas não encontramos a opção de phishing. Denuncie manualmente pelo mesmo menu.' };
+  }
+  itemPhishing.click();
+  await aguardar(400);
+
+  // o Gmail costuma pedir uma confirmação final antes de enviar a denúncia
+  const botaoConfirmar = encontrarElementoPorTexto(
+    'div[role="button"], button',
+    /denunciar mensagem de phishing|report phishing message/i
+  );
+  if (botaoConfirmar) {
+    botaoConfirmar.click();
+    return { sucesso: true, mensagem: 'Denúncia enviada ao Gmail.' };
+  }
+
+  return { sucesso: false, mensagem: 'Selecionamos "Denunciar phishing" — confirme na janela que o Gmail abriu pra concluir o envio.' };
+}
+
+async function denunciarPhishingOutlook() {
+  // tenta abrir o menu de "mais ações" da mensagem, se existir nessa versão
+  const maisBtn = encontrarElementoPorTexto('[aria-label]', /^(mais ações|more actions|mais opções|more options)$/i);
+  if (maisBtn) {
+    maisBtn.click();
+    await aguardar(350);
+  }
+
+  let itemReport = encontrarElementoPorTexto('[role="menuitem"], button, div[role="button"]', /^(report|denunciar)$/i);
+  if (itemReport) {
+    itemReport.click();
+    await aguardar(350);
+  }
+
+  const itemPhishing = encontrarElementoPorTexto('[role="menuitem"], button, div[role="button"]', /phishing/i);
+  if (!itemPhishing) {
+    return { sucesso: false, mensagem: 'Não encontramos a opção de denunciar phishing nesta versão do Outlook. Denuncie manualmente pelo menu "Lixo eletrônico" › "Phishing".' };
+  }
+  itemPhishing.click();
+  await aguardar(300);
+
+  const botaoConfirmar = encontrarElementoPorTexto('button, div[role="button"]', /^(report|denunciar|confirm|confirmar)$/i);
+  if (botaoConfirmar) {
+    botaoConfirmar.click();
+    return { sucesso: true, mensagem: 'Denúncia enviada ao Outlook.' };
+  }
+  return { sucesso: false, mensagem: 'Selecionamos a opção de phishing — confirme na janela que o Outlook abriu pra concluir o envio.' };
+}
+
+async function denunciarPhishingAtual() {
+  const servico = detectarServico();
+  if (servico === 'gmail') return denunciarPhishingGmail();
+  if (servico === 'outlook') return denunciarPhishingOutlook();
+  return { sucesso: false, mensagem: 'Serviço de e-mail não suportado para denúncia automática.' };
+}
+
 // escuta pedidos vindos do popup (script.js) pra extrair o e-mail da tela
+// ou pra acionar a denúncia nativa de phishing
 chrome.runtime.onMessage.addListener((mensagem, remetenteMsg, sendResponse) => {
   if (mensagem?.tipo === 'EXTRAIR_EMAIL_ATUAL') {
-    const dados = extrairEmailAtual();
-    sendResponse(dados);
+    sendResponse(extrairEmailAtual());
+    return true;
   }
-  // mantém o canal aberto para resposta assíncrona, se precisar no futuro
+  if (mensagem?.tipo === 'DENUNCIAR_PHISHING') {
+    denunciarPhishingAtual().then(sendResponse);
+    return true; // resposta assíncrona
+  }
   return true;
 });

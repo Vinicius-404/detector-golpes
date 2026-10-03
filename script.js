@@ -313,8 +313,8 @@ storage.get('protecaoAtivada').then((ativada) => {
 // ---------- BOTÃO "DENUNCIAR" ----------
 const btnDenunciar = document.getElementById('btn-denunciar');
 
-function marcarDenunciado(btn) {
-  btn.textContent = 'Denunciado ✓';
+function marcarDenunciado(btn, texto) {
+  btn.textContent = texto || 'Denunciado ✓';
   btn.disabled = true;
   btn.style.opacity = '0.75';
 }
@@ -325,15 +325,94 @@ function resetarBotaoDenunciar(btn) {
   btn.style.opacity = '1';
 }
 
+// tenta acionar o recurso NATIVO de "denunciar phishing" do Gmail/Outlook,
+// na mesma aba de onde o e-mail foi lido. Isso exige pedir permissão de
+// novo (removemos a permissão logo depois de extrair o e-mail, por
+// privacidade) e reinjetar o content script. Se qualquer passo falhar —
+// aba foi fechada, layout não reconhecido, etc. — devolve sucesso:false
+// com uma mensagem explicando o que fazer manualmente, em vez de fingir
+// que a denúncia foi enviada.
+async function tentarDenunciarNaOrigem(tabId, provider) {
+  if (!tabId || !provider) {
+    return { sucesso: false, mensagem: 'Não sabemos em qual aba esse e-mail estava aberto.' };
+  }
+  let origin = null;
+  let permissaoConcedidaAgora = false;
+  try {
+    const aba = await chrome.tabs.get(tabId);
+    if (!aba?.url) return { sucesso: false, mensagem: 'A aba onde o e-mail estava aberto não existe mais.' };
+
+    origin = new URL(aba.url).origin + '/*';
+    permissaoConcedidaAgora = await chrome.permissions.request({ origins: [origin] });
+    if (!permissaoConcedidaAgora) {
+      return { sucesso: false, mensagem: 'Permissão negada — não foi possível acessar a aba pra denunciar automaticamente.' };
+    }
+
+    await chrome.scripting.executeScript({ target: { tabId }, files: ['content.js'] });
+    const resposta = await chrome.tabs.sendMessage(tabId, { tipo: 'DENUNCIAR_PHISHING', provider });
+    return resposta || { sucesso: false, mensagem: 'Não recebemos resposta da página.' };
+  } catch (err) {
+    return { sucesso: false, mensagem: 'A aba onde o e-mail estava aberto não existe mais ou foi navegada pra outro lugar.' };
+  } finally {
+    if (permissaoConcedidaAgora && origin) {
+      try { await chrome.permissions.remove({ origins: [origin] }); } catch (e) { /* ignora */ }
+    }
+  }
+}
+
+// manda o link real (href) encontrado no e-mail pro verificador público do
+// Google Safe Browsing — a mesma ferramenta que o Google usa pra avisar
+// "este site pode ser perigoso" no Chrome e na busca. Não precisa de chave
+// de API: é a página pública transparencyreport.google.com.
+async function abrirVerificacaoSafeBrowsing(url) {
+  const urlVerificacao = 'https://transparencyreport.google.com/safe-browsing/search?url=' + encodeURIComponent(url);
+  try {
+    await chrome.tabs.create({ url: urlVerificacao });
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
+
 btnDenunciar.addEventListener('click', async (e) => {
   const btn = e.currentTarget;
+  const textoOriginal = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Denunciando...';
+
+  const ultimo = await storage.get('ultimoResultado');
+
+  // se o e-mail tinha algum link, manda o destino real dele pro Google
+  // Safe Browsing verificar se é uma página perigosa/fraudulenta
+  const primeiroLink = ultimo?.links?.[0];
+  const linkVerificado = primeiroLink ? await abrirVerificacaoSafeBrowsing(primeiroLink) : false;
+
+  const resultadoDenuncia = await tentarDenunciarNaOrigem(ultimo?.tabId, ultimo?.provider);
+
   const stats = await getStats();
   stats.denuncias += 1;
   await saveStats(stats);
-  marcarDenunciado(btn);
 
-  // marca a denúncia no resultado salvo, pra manter o estado ao reabrir
-  const ultimo = await storage.get('ultimoResultado');
+  const sufixoLink = linkVerificado ? ' + link verificado no Safe Browsing' : '';
+
+  if (resultadoDenuncia.sucesso) {
+    const nomeServico = ultimo?.provider === 'gmail' ? 'Gmail' : ultimo?.provider === 'outlook' ? 'Outlook' : 'provedor';
+    marcarDenunciado(btn, `Denunciado ao ${nomeServico} ✓${sufixoLink}`);
+  } else {
+    // não conseguimos confirmar a denúncia nativa — registra só
+    // localmente (nas estatísticas) e explica o que fazer, sem fingir
+    // que foi enviada de verdade
+    btn.disabled = false;
+    btn.textContent = textoOriginal;
+    window.alert(
+      'Não conseguimos denunciar automaticamente nesta aba.\n\n' +
+      resultadoDenuncia.mensagem +
+      (linkVerificado ? '\n\nAbrimos a verificação do link no Google Safe Browsing em outra aba.' : '') +
+      '\n\nRegistramos a denúncia nas suas estatísticas mesmo assim.'
+    );
+    marcarDenunciado(btn, `Denúncia registrada ✓${sufixoLink}`);
+  }
+
   if (ultimo) {
     ultimo.denunciado = true;
     await storage.set('ultimoResultado', ultimo);
@@ -360,6 +439,12 @@ function irParaInicioEDestacarAtivarProtecao() {
 }
 
 btnSino.addEventListener('click', () => {
+  mostrarToastNovoEmail();
+});
+
+// mesmo atalho do sino, só que como botão fixo na tela de início (não
+// depende do usuário notar o ícone no topo)
+document.getElementById('btn-analisar-inicio').addEventListener('click', () => {
   mostrarToastNovoEmail();
 });
 
@@ -438,6 +523,12 @@ async function tentarExtrairEmailDaAbaAtiva() {
       aba.url.includes('outlook.office.com');
     if (!ehGmailOuOutlook) return null;
 
+    const provider = aba.url.includes('mail.google.com')
+      ? 'gmail'
+      : (aba.url.includes('outlook.live.com') || aba.url.includes('outlook.office.com'))
+        ? 'outlook'
+        : null;
+
     origin = new URL(aba.url).origin + '/*';
 
     // pede a permissão sempre (mesmo que já tenha sido concedida antes,
@@ -458,7 +549,15 @@ async function tentarExtrairEmailDaAbaAtiva() {
     return {
       remetente: resposta.remetente || 'remetente não identificado',
       email_subject: resposta.assunto || '',
-      email_text: resposta.corpo
+      email_text: resposta.corpo,
+      // guardamos de qual aba/serviço veio esse e-mail pra, se o usuário
+      // clicar em "Denunciar e-mail" mais tarde, conseguirmos acionar o
+      // recurso nativo de denúncia na mesma mensagem
+      tabId: aba.id,
+      provider,
+      // links reais (href) encontrados no corpo do e-mail — usados depois
+      // pra checar o destino no Google Safe Browsing
+      links: resposta.links || []
     };
   } catch (err) {
     return null;
@@ -603,7 +702,12 @@ function renderMotivosERemetente(sample, resultado) {
     remetente: sample.remetente,
     motivos: resultado.motivos,
     modeloInfo: resultado.modeloInfo,
-    denunciado: false
+    denunciado: false,
+    // guardados pra o botão "Denunciar e-mail" conseguir acionar a denúncia
+    // nativa do Gmail/Outlook mesmo depois de fechar e reabrir o popup
+    tabId: sample.tabId,
+    provider: sample.provider,
+    links: sample.links || []
   });
 }
 
@@ -631,7 +735,11 @@ storage.get('ultimoResultado').then((ultimo) => {
   }
   infoEl.textContent = ultimo.modeloInfo;
 
-  if (ultimo.denunciado) marcarDenunciado(btnDenunciar);
+  if (ultimo.denunciado) {
+    const nomeServico = ultimo.provider === 'gmail' ? 'Gmail' : ultimo.provider === 'outlook' ? 'Outlook' : null;
+    const sufixoLink = ultimo.links?.length ? ' + link verificado no Safe Browsing' : '';
+    marcarDenunciado(btnDenunciar, (nomeServico ? `Denunciado ao ${nomeServico} ✓` : 'Denúncia registrada ✓') + sufixoLink);
+  }
 });
 
 // anima a barra de progresso com uma porcentagem visível enquanto a
