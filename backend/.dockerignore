@@ -1,7 +1,0 @@
-README.md
-.git
-.gitignore
-venv/
-**/__pycache__/
-*.pyc
-.pytest_cache
