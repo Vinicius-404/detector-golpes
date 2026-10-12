@@ -38,7 +38,11 @@ body{
 .app{
   width:360px;
   max-width:360px;
-  min-height:560px;
+  /* altura FIXA (não min-height): garante que o popup tenha sempre o
+     mesmo tamanho em todas as telas, independente de quanto conteúdo
+     cada uma tem — o .main rola por dentro se precisar de mais espaço */
+  height:560px;
+  max-height:560px;
   display:flex;
   flex-direction:column;
   background:var(--gray-bg);
