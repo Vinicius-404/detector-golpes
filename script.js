@@ -31,6 +31,36 @@ const storage = {
   }
 };
 
+// ---------- STORAGE DE SESSÃO (chrome.storage.session) ----------
+// usado só pro histórico de ameaças: ao contrário do chrome.storage.local,
+// os dados aqui somem quando o navegador é fechado — não persistem entre
+// sessões. Mesmo fallback de testes fora da extensão que o storage normal.
+const storageSession = {
+  get(key) {
+    return new Promise((resolve) => {
+      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.session) {
+        chrome.storage.session.get([key], (result) => resolve(result[key]));
+      } else {
+        window.__devStorageSession = window.__devStorageSession || {};
+        if (!(key in window.__devStorageSession)) { resolve(undefined); return; }
+        try { resolve(JSON.parse(window.__devStorageSession[key])); }
+        catch (e) { resolve(undefined); }
+      }
+    });
+  },
+  set(key, value) {
+    return new Promise((resolve) => {
+      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.session) {
+        chrome.storage.session.set({ [key]: value }, resolve);
+      } else {
+        window.__devStorageSession = window.__devStorageSession || {};
+        window.__devStorageSession[key] = JSON.stringify(value);
+        resolve();
+      }
+    });
+  }
+};
+
 const MAX_HISTORICO = 3;
 
 // data/hora relativa ("Hoje 10:18" / "Ontem 18:42" / "20/09 11:39"), calculada
@@ -163,7 +193,7 @@ function renderHistorico(items) {
 }
 
 async function getHistorico() {
-  return (await storage.get('historico')) || [];
+  return (await storageSession.get('historico')) || [];
 }
 
 // adiciona no topo; se passar de MAX_HISTORICO, remove o mais antigo (FIFO)
@@ -171,7 +201,7 @@ async function addHistorico(level, remetente, motivo) {
   const items = await getHistorico();
   items.unshift({ level, remetente, motivo, timestamp: new Date().toISOString() });
   const limitado = items.slice(0, MAX_HISTORICO);
-  await storage.set('historico', limitado);
+  await storageSession.set('historico', limitado);
   renderHistorico(limitado);
 }
 
@@ -252,7 +282,7 @@ document.getElementById('btn-limpar-dados').addEventListener('click', async (e) 
   const confirmar = window.confirm('Isso vai apagar seu histórico de ameaças e as estatísticas. Deseja continuar?');
   if (!confirmar) return;
 
-  await storage.set('historico', []);
+  await storageSession.set('historico', []);
   await storage.set('stats', { emails: 0, ameacas: 0, denuncias: 0 });
   await storage.set('ultimoResultado', null);
 
@@ -568,14 +598,25 @@ async function tentarExtrairEmailDaAbaAtiva() {
   }
 }
 
+// medição de desempenho (RNF01/RNF02): marca o início do fluxo inteiro
+// (captura + análise) assim que o usuário autoriza a leitura do e-mail,
+// e guarda o tempo de captura em si pra reportar os dois separadamente
+// quando a análise terminar
+let _medicaoTotalInicio = null;
+let _medicaoCapturaMs = null;
+
 // faz a leitura da aba e atualiza a tela "Analisar e-mail" com o resultado
 // (preview de remetente/assunto em caso de sucesso, ou aviso de erro)
 async function lerEmailEAtualizarTela() {
+  _medicaoTotalInicio = performance.now();
+
   resetarTelaNovoEmail();
   elCarregandoEmail.style.display = 'block';
   elIconNovoEmail.classList.add('icon-pulse');
 
+  const inicioCaptura = performance.now();
   const emailReal = await tentarExtrairEmailDaAbaAtiva();
+  _medicaoCapturaMs = performance.now() - inicioCaptura;
 
   elCarregandoEmail.style.display = 'none';
   elIconNovoEmail.classList.remove('icon-pulse');
@@ -809,6 +850,21 @@ document.getElementById('btn-me-proteger').addEventListener('click', async () =>
 
     // leva o usuário para a tela de ameaças com o resultado
     irParaTela('ameacas');
+
+    // medição de desempenho (RNF01: captura ≤10s, RNF02: total ≤30s) —
+    // espera dois quadros de animação pra garantir que a tela já pintou
+    // o resultado antes de fechar a medição do tempo total
+    await new Promise((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(resolve));
+    });
+    const totalMs = performance.now() - (_medicaoTotalInicio ?? performance.now());
+    const capturaMs = _medicaoCapturaMs ?? 0;
+    console.table({
+      captura_segundos: (capturaMs / 1000).toFixed(3),
+      total_segundos: (totalMs / 1000).toFixed(3),
+      RNF01: capturaMs <= 10000 ? 'Atendido' : 'Não atendido',
+      RNF02: totalMs <= 30000 ? 'Atendido' : 'Não atendido'
+    });
   } catch (err) {
     console.error('Falha ao analisar o e-mail:', err);
     clearInterval(progressoId);
