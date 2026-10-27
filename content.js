@@ -176,39 +176,68 @@ function estaVisivel(el) {
   return !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
 }
 
-// o Gmail usa mousedown/mouseup nos botões e itens de menu, não só click
+// o Gmail novo usa <button> nativo (escuta "click"); o antigo usa <div
+// role="button"> que só reage a mousedown/mouseup
 function clicarComoUsuario(el) {
-  ['mousedown', 'mouseup', 'click'].forEach((tipo) => {
-    el.dispatchEvent(new MouseEvent(tipo, { bubbles: true, cancelable: true, view: window }));
-  });
+  if (el.tagName !== 'BUTTON') {
+    ['mousedown', 'mouseup'].forEach((tipo) => {
+      el.dispatchEvent(new MouseEvent(tipo, { bubbles: true, cancelable: true, view: window }));
+    });
+  }
+  el.click();
+}
+
+function rotuloDe(el) {
+  return (el.getAttribute('aria-label') || el.getAttribute('data-tooltip') || '').trim();
+}
+
+function encontrarItemPhishingVisivel() {
+  return Array.from(document.querySelectorAll('[role="menuitem"], [role="menu"] li, [role="menu"] button'))
+    .find((el) => estaVisivel(el) && /phishing/i.test(el.textContent || '')) || null;
+}
+
+function fecharMenuAberto() {
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', keyCode: 27, bubbles: true }));
+  document.body.click();
 }
 
 // Leva o usuário até o "Denunciar phishing" do próprio Gmail: abre o menu
 // ⋮ da mensagem e clica na opção de phishing. A janela de confirmação do
 // Gmail fica aberta pro usuário concluir a denúncia ele mesmo.
 async function denunciarPhishingGmail() {
-  // botão "Mais" (⋮) da mensagem aberta — numa conversa com várias
-  // mensagens, o último visível é o da mensagem mais recente/expandida
-  const botoesMais = Array.from(document.querySelectorAll('[role="button"][aria-label], [role="button"][data-tooltip]'))
-    .filter((el) => {
-      const rotulo = (el.getAttribute('aria-label') || el.getAttribute('data-tooltip') || '').trim();
-      return /^(mais|more)$/i.test(rotulo) && estaVisivel(el);
+  // o ⋮ da mensagem muda de rótulo conforme a versão do Gmail ("Mais",
+  // "Mais opções de mensagem", "More message options"...), então pegamos
+  // todos os botões "Mais…" visíveis e testamos um por um até algum abrir
+  // um menu com a opção de phishing. Os que falam de "mensagem/message"
+  // vêm primeiro e, entre iguais, o último da tela (mensagem mais recente
+  // de uma conversa)
+  const botoesMais = Array.from(document.querySelectorAll('button[aria-label], [role="button"][aria-label], [role="button"][data-tooltip]'))
+    .filter((el) => /^(mais|more)\b/i.test(rotuloDe(el)) && estaVisivel(el))
+    .reverse()
+    .sort((a, b) => {
+      const ehDaMensagem = (el) => (/mensagem|message/i.test(rotuloDe(el)) ? 0 : 1);
+      return ehDaMensagem(a) - ehDaMensagem(b);
     });
-  const maisBtn = botoesMais[botoesMais.length - 1];
-  if (!maisBtn) {
+
+  if (!botoesMais.length) {
     return { sucesso: false, mensagem: 'Não encontramos o menu "Mais" (⋮) da mensagem no Gmail. Abra o e-mail e denuncie manualmente (⋮ › Denunciar phishing).' };
   }
-  clicarComoUsuario(maisBtn);
-  await aguardar(400);
 
-  const itemPhishing = Array.from(document.querySelectorAll('[role="menuitem"]'))
-    .find((el) => estaVisivel(el) && /phishing/i.test(el.textContent || ''));
-  if (!itemPhishing) {
-    return { sucesso: false, mensagem: 'Abrimos o menu "Mais", mas não encontramos a opção "Denunciar phishing". Denuncie manualmente pelo mesmo menu.' };
+  for (const maisBtn of botoesMais) {
+    clicarComoUsuario(maisBtn);
+    await aguardar(400);
+
+    const itemPhishing = encontrarItemPhishingVisivel();
+    if (itemPhishing) {
+      clicarComoUsuario(itemPhishing);
+      return { sucesso: true, mensagem: 'Abrimos o "Denunciar phishing" do Gmail — confirme na janela do Gmail pra enviar a denúncia.' };
+    }
+
+    fecharMenuAberto();
+    await aguardar(200);
   }
-  clicarComoUsuario(itemPhishing);
 
-  return { sucesso: true, mensagem: 'Abrimos o "Denunciar phishing" do Gmail — confirme na janela do Gmail pra enviar a denúncia.' };
+  return { sucesso: false, mensagem: 'Abrimos os menus "Mais" da mensagem, mas não encontramos a opção "Denunciar phishing". Denuncie manualmente (⋮ › Denunciar phishing).' };
 }
 
 async function denunciarPhishingOutlook() {
