@@ -223,11 +223,24 @@ async function denunciarPhishingGmail() {
     return { sucesso: false, mensagem: 'Não encontramos o menu "Mais" (⋮) da mensagem no Gmail. Abra o e-mail e denuncie manualmente (⋮ › Denunciar phishing).' };
   }
 
+  console.debug('[Proteção contra Golpes] botões "Mais" candidatos:', botoesMais.map(rotuloDe));
+
   for (const maisBtn of botoesMais) {
     clicarComoUsuario(maisBtn);
-    await aguardar(400);
 
-    const itemPhishing = encontrarItemPhishingVisivel();
+    // na primeira abertura o Gmail ainda carrega o código do menu, então
+    // um tempo fixo curto não basta: esperamos a opção aparecer (até 3s)
+    let itemPhishing = null;
+    for (let t = 0; t < 30 && !itemPhishing; t++) {
+      await aguardar(100);
+      itemPhishing = encontrarItemPhishingVisivel();
+    }
+
+    console.debug('[Proteção contra Golpes]', rotuloDe(maisBtn),
+      '| aria-expanded:', maisBtn.getAttribute('aria-expanded'),
+      '| itens de menu visíveis:', Array.from(document.querySelectorAll('[role="menuitem"]'))
+        .filter(estaVisivel).map((el) => (el.textContent || '').trim()));
+
     if (itemPhishing) {
       clicarComoUsuario(itemPhishing);
       return { sucesso: true, mensagem: 'Abrimos o "Denunciar phishing" do Gmail — confirme na janela do Gmail pra enviar a denúncia.' };
