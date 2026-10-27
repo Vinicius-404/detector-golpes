@@ -394,14 +394,26 @@ async function tentarDenunciarNaOrigem(tabId, provider) {
 // Google Safe Browsing — a mesma ferramenta que o Google usa pra avisar
 // "este site pode ser perigoso" no Chrome e na busca. Não precisa de chave
 // de API: é a página pública transparencyreport.google.com.
+// abre em segundo plano (active:false): se a aba nova ganhasse o foco, o
+// popup fecharia e o resto do fluxo de denúncia seria interrompido
 async function abrirVerificacaoSafeBrowsing(url) {
   const urlVerificacao = 'https://transparencyreport.google.com/safe-browsing/search?url=' + encodeURIComponent(url);
   try {
-    await chrome.tabs.create({ url: urlVerificacao });
+    await chrome.tabs.create({ url: urlVerificacao, active: false });
     return true;
   } catch (err) {
     return false;
   }
+}
+
+// traz a aba do e-mail pra frente, pro usuário ver a janela de denúncia
+// que o Gmail/Outlook abriu. Isso fecha o popup, então tem que ser o
+// último passo do fluxo.
+async function focarAbaDoEmail(tabId) {
+  try {
+    const aba = await chrome.tabs.update(tabId, { active: true });
+    await chrome.windows.update(aba.windowId, { focused: true });
+  } catch (err) { /* aba não existe mais — ignora */ }
 }
 
 btnDenunciar.addEventListener('click', async (e) => {
@@ -412,12 +424,12 @@ btnDenunciar.addEventListener('click', async (e) => {
 
   const ultimo = await storage.get('ultimoResultado');
 
+  const resultadoDenuncia = await tentarDenunciarNaOrigem(ultimo?.tabId, ultimo?.provider);
+
   // se o e-mail tinha algum link, manda o destino real dele pro Google
   // Safe Browsing verificar se é uma página perigosa/fraudulenta
   const primeiroLink = ultimo?.links?.[0];
   const linkVerificado = primeiroLink ? await abrirVerificacaoSafeBrowsing(primeiroLink) : false;
-
-  const resultadoDenuncia = await tentarDenunciarNaOrigem(ultimo?.tabId, ultimo?.provider);
 
   const stats = await getStats();
   stats.denuncias += 1;
@@ -447,6 +459,10 @@ btnDenunciar.addEventListener('click', async (e) => {
     ultimo.denunciado = true;
     await storage.set('ultimoResultado', ultimo);
   }
+
+  // por último: leva o usuário até a janela de denúncia que o provedor
+  // abriu (isso fecha o popup, por isso fica depois de salvar tudo)
+  if (resultadoDenuncia.sucesso) await focarAbaDoEmail(ultimo.tabId);
 });
 
 // ---------- TOAST "NOVO E-MAIL DETECTADO" (flutua sobre o início) ----------
